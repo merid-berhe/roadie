@@ -33,6 +33,9 @@ export default class RideRoom implements Party.Server {
   private rideStartAt: number | null = null;
   private readonly generator: MusicGenerator;
 
+  // Clock sync (M4) — §9
+  private syncTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(readonly room: Party.Room) {
     const falKey = room.env['FAL_KEY'] as string | undefined;
     this.generator = falKey ? new FalMiniMaxGenerator(falKey) : new MockMusicGenerator();
@@ -47,6 +50,7 @@ export default class RideRoom implements Party.Server {
       case 'seed':   return this.handleSeed(msg, sender);
       case 'choice': return this.handleChoice(msg, sender);
       case 'ready':  return this.handleReady(sender);
+      case 'ping':   return this.handlePing(msg, sender);
     }
   }
 
@@ -54,6 +58,10 @@ export default class RideRoom implements Party.Server {
     if (this.participants.delete(conn.id)) {
       this.seeds.delete(conn.id);
       this.readyConnIds.delete(conn.id);
+      if (this.participants.size === 0 && this.syncTimer) {
+        clearInterval(this.syncTimer);
+        this.syncTimer = null;
+      }
       this.broadcastState();
     }
   }
@@ -157,6 +165,7 @@ export default class RideRoom implements Party.Server {
       for (const connId of this.participants.keys()) {
         this.room.getConnection(connId)?.send(JSON.stringify(rideStartMsg));
       }
+      this.startSyncInterval();
       this.broadcastState();
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -168,6 +177,23 @@ export default class RideRoom implements Party.Server {
         );
       }
     }
+  }
+
+  // --- clock sync (M4, §9) ---
+
+  private handlePing(msg: Extract<ClientMsg, { t: 'ping' }>, sender: Party.Connection): void {
+    sender.send(JSON.stringify({ t: 'pong', sentAt: msg.sentAt, serverTime: Date.now() } satisfies RoomMsg));
+  }
+
+  private startSyncInterval(): void {
+    if (this.syncTimer) return;
+    this.syncTimer = setInterval(() => {
+      if (!this.rideStartAt) return;
+      const positionSec = (Date.now() - this.rideStartAt) / 1000;
+      for (const connId of this.participants.keys()) {
+        this.room.getConnection(connId)?.send(JSON.stringify({ t: 'sync', positionSec } satisfies RoomMsg));
+      }
+    }, 10_000);
   }
 
   // --- helpers ---

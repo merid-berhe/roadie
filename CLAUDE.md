@@ -105,6 +105,12 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ---
 
+#### 2026-06-05 — M4: synced ride + PixiJS scene
+- **Completed:** ping/pong clock offset (§9) — server returns `pong {serverTime}` immediately, client averages RTT-corrected offset across 3 pings, stored in `useRoom.clockOffset`; server broadcasts `sync {positionSec}` every 10s during riding; client drift correction in `Riding.tsx` — nudges `playbackRate` ±5% if |drift|>250ms; `audio/player.ts` uses `clockOffset` to schedule track at the right local time; `net/clock.ts` for RTT math. PixiJS v8 scene: `scene/palette.ts` (6 mood palettes, blended from both seeds §7), `scene/SceneCanvas.tsx` (3-layer double-buffer parallax, cabin frame overlay with windshield cutout + pillar darkening, occupant glyph silhouettes, clock-synced scroll). `Riding.tsx`: full screen scene + progress bar + mood attribution HUD. `RideScreen.tsx`: pings on connect. Verified live: 9/9 — pong format correct, sync fires on schedule, positionSec accurate to 0.00s error. Merged to `main`, pushed.
+- **In flight:** nothing. **Next:** M5 — gesture layer + firework finale: warm reactions (wave/headlights/heart), beat-locked sounds (Tone.js quantised to next beat), co-launched firework with 1500ms sync window.
+
+---
+
 #### 2026-06-05 — M3: generation + latency mask
 - **Completed:** `MusicGenerator` interface + `FalMiniMaxGenerator` (fal.ai queue API, 60s timeout §16) + `MockMusicGenerator` (local dev, no credits); room server fires `generate()` async on `advanceToGenerating`, broadcasts `rideStart` on success (phase→`riding`) and `generationFailed` on failure; `generationFailed` added to `RoomMsg`; `useRoom` handles `rideStart`/`generationFailed`; `audio/bed.ts` (drone+noise pad, silent during compose for iOS keepalive §11, fades in at generating); `audio/player.ts` (fetch+decode+schedule+3s crossfade); `Generating` screen ("tuning" animated UI); `Riding` placeholder (M4); `RideScreen` crossfade useEffect + generation-failed screen. Verified live: 11/11 — both clients receive `rideStart` with audioUrl+bpm+rideStartAt, phase=riding, same values across both clients, no userId leak. Merged to `main`, pushed.
 - **In flight:** nothing. **Next:** M4 — synced ride: PixiJS scenery, server-authoritative clock sync, drift correction (±250ms). Accept: playback position within ~250ms across two devices.

@@ -1,27 +1,28 @@
 // Generated track player (§3, §9).
-// Loads the fal.ai audio URL, schedules playback at the server-authoritative
-// rideStartAt timestamp, and crossfades from the ambient bed (§1 step 4).
+// Loads the fal.ai audio URL, schedules at rideStartAt (server clock, offset-corrected),
+// crossfades from the ambient bed, and supports drift correction from sync messages.
 
 import * as Tone from 'tone';
 import { fadeBedOut } from './bed';
 
 let trackGain: Tone.Gain | null = null;
-let source: AudioBufferSourceNode | null = null;
+let trackSource: AudioBufferSourceNode | null = null;
+let localStartTime: number | null = null; // actual local ms when track started playing
 
 /**
- * Load the generated track, schedule it at rideStartAt (server wall-clock ms),
- * and crossfade from the bed. Safe to call once; subsequent calls are no-ops.
+ * Load and schedule the generated track.
+ * clockOffset = serverTime - localTime (from ping/pong, §9).
  */
 export async function loadAndCrossfade(
   audioUrl: string,
-  rideStartAt: number,
-  _bpm: number, // M4+: use for beat-locked crossfade; ignored for now
+  rideStartAt: number,   // server-authoritative timestamp (ms)
+  _bpm: number,          // M5+: beat-locked crossfade; ignored for now
+  clockOffset: number,   // server clock offset from ping/pong
 ): Promise<void> {
   if (trackGain) return; // already loaded
 
-  // A 'mock://' URL means we're in local dev without a FAL_KEY — skip gracefully.
   if (audioUrl.startsWith('mock://')) {
-    console.warn('[player] mock audioUrl — no track to play (set FAL_KEY in party/.dev.vars)');
+    console.warn('[player] mock audioUrl — no track (set FAL_KEY in party/.dev.vars)');
     return;
   }
 
@@ -29,38 +30,67 @@ export async function loadAndCrossfade(
     const ctx = Tone.getContext().rawContext as AudioContext;
     const response = await fetch(audioUrl);
     if (!response.ok) throw new Error(`fetch ${response.status}`);
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = await ctx.decodeAudioData(arrayBuffer);
+    const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
 
-    // Wire through a gain node so we can crossfade
     trackGain = new Tone.Gain(0).toDestination();
-    source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(trackGain.input as AudioNode);
+    trackSource = ctx.createBufferSource();
+    trackSource.buffer = buffer;
+    trackSource.connect(trackGain.input as AudioNode);
 
-    // Schedule start at the server-authoritative timestamp (simple offset for M3;
-    // M4 adds proper clock-offset correction, §9)
-    const delayMs = Math.max(0, rideStartAt - Date.now());
-    const delayTone = delayMs / 1000;
-    source.start(ctx.currentTime + delayTone);
+    // Convert server timestamp to local delay using the estimated clock offset (§9)
+    // rideStartAt is server ms; (Date.now() + clockOffset) is local clock in server units
+    const delayMs = Math.max(0, rideStartAt - (Date.now() + clockOffset));
+    const delaySec = delayMs / 1000;
+    trackSource.start(ctx.currentTime + delaySec);
+    localStartTime = Date.now() + delayMs;
 
-    // Crossfade: bed fades out, track fades in over 3s starting at rideStartAt
     const crossfadeSec = 3;
     setTimeout(() => {
       fadeBedOut(crossfadeSec);
       trackGain?.gain.rampTo(1, crossfadeSec);
     }, delayMs);
 
-    console.log(`[player] track scheduled, starts in ${Math.round(delayMs)}ms`);
+    console.log(`[player] track scheduled, starts in ${Math.round(delayMs)}ms (offset=${Math.round(clockOffset)}ms)`);
   } catch (err) {
     console.error('[player] failed to load/schedule track:', err);
-    // Bed continues playing — rider still has the ambient experience
   }
 }
 
+/**
+ * Current playback position in seconds (based on when track actually started).
+ * Used by drift correction — compare with sync.positionSec from the room.
+ */
+export function getActualPositionSec(): number | null {
+  if (!localStartTime) return null;
+  return Math.max(0, (Date.now() - localStartTime) / 1000);
+}
+
+/**
+ * Nudge playback rate to correct drift (§9).
+ * |drift| > 0.25s → temporarily adjust rate by ±5% until corrected.
+ * Inaudible for small corrections; limits to avoid pitch distortion.
+ */
+export function nudgePlayback(driftSec: number): void {
+  if (!trackSource) return;
+  const absDrift = Math.abs(driftSec);
+  if (absDrift < 0.25) return;
+
+  const rate = driftSec > 0 ? 0.95 : 1.05; // behind → speed up; ahead → slow down
+  const correctionMs = (absDrift / 0.05) * 1000; // time needed at 5% to close the gap
+  const clampedMs = Math.min(correctionMs, 10_000); // cap at 10s of correction
+
+  trackSource.playbackRate.value = rate;
+  setTimeout(() => {
+    if (trackSource) trackSource.playbackRate.value = 1.0;
+  }, clampedMs);
+
+  console.log(`[player] drift ${Math.round(driftSec * 1000)}ms → rate ${rate} for ${Math.round(clampedMs)}ms`);
+}
+
 export function stopTrack(): void {
-  try { source?.stop(); } catch { /* already stopped */ }
+  try { trackSource?.stop(); } catch { /* already stopped */ }
   trackGain?.dispose();
   trackGain = null;
-  source = null;
+  trackSource = null;
+  localStartTime = null;
 }

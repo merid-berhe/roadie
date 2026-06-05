@@ -20,6 +20,7 @@ export type ClientMsg =
   | { t: 'seed'; word: string }
   | { t: 'choice'; field: string; value: string }
   | { t: 'ready' }
+  | { t: 'ping'; sentAt: number } // clock offset estimation (§9)
   // --- M5+ ---
   | { t: 'gesture'; kind: GestureKind }
   | { t: 'firework' }
@@ -41,6 +42,7 @@ export type RoomMsg =
   | { t: 'roomFull' }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
   | { t: 'generationFailed'; reason: string }
+  | { t: 'pong'; sentAt: number; serverTime: number }
   // --- M3+ ---
   | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }

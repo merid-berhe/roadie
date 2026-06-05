@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { startBedSilent, stopBed } from '../audio/bed';
 import { loadAndCrossfade } from '../audio/player';
 import { stopIdleHum } from '../audio/engine';
+import { estimateClockOffset } from '../net/clock';
 import { connectToRoom } from '../net/room';
 import { getOrCreateRoomCode } from '../lib/roomCode';
 import { useRoom } from '../state/room';
@@ -23,6 +24,7 @@ export default function RideScreen() {
   const audioUrl = useRoom((s) => s.audioUrl);
   const rideStartAt = useRoom((s) => s.rideStartAt);
   const bpm = useRoom((s) => s.bpm);
+  const clockOffset = useRoom((s) => s.clockOffset);
 
   const [roomCode] = useState(getOrCreateRoomCode);
 
@@ -35,6 +37,7 @@ export default function RideScreen() {
         useRoom.getState().setConnected(true);
         useRoom.getState().setSend(conn.send);
         conn.send({ t: 'join', userId, glyph: identity.glyph, color: identity.color });
+        estimateClockOffset(conn.send); // 3 pings, offsets averaged in room store (§9)
       },
       onMessage: (msg) => useRoom.getState().ingest(msg),
       onClose: () => { useRoom.getState().setConnected(false); useRoom.getState().setSend(noop); },
@@ -50,9 +53,9 @@ export default function RideScreen() {
   // Crossfade: fires from here so it works regardless of which screen is mounted (§1 step 4)
   useEffect(() => {
     if (audioUrl && rideStartAt && bpm) {
-      loadAndCrossfade(audioUrl, rideStartAt, bpm);
+      loadAndCrossfade(audioUrl, rideStartAt, bpm, clockOffset);
     }
-  }, [audioUrl, rideStartAt, bpm]);
+  }, [audioUrl, rideStartAt, bpm, clockOffset]);
 
   if (rejectedFull) {
     return (
