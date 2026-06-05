@@ -40,6 +40,7 @@ export type RoomMsg =
     }
   | { t: 'roomFull' }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
+  | { t: 'generationFailed'; reason: string }
   // --- M3+ ---
   | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }

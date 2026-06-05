@@ -105,6 +105,12 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ---
 
+#### 2026-06-05 — M3: generation + latency mask
+- **Completed:** `MusicGenerator` interface + `FalMiniMaxGenerator` (fal.ai queue API, 60s timeout §16) + `MockMusicGenerator` (local dev, no credits); room server fires `generate()` async on `advanceToGenerating`, broadcasts `rideStart` on success (phase→`riding`) and `generationFailed` on failure; `generationFailed` added to `RoomMsg`; `useRoom` handles `rideStart`/`generationFailed`; `audio/bed.ts` (drone+noise pad, silent during compose for iOS keepalive §11, fades in at generating); `audio/player.ts` (fetch+decode+schedule+3s crossfade); `Generating` screen ("tuning" animated UI); `Riding` placeholder (M4); `RideScreen` crossfade useEffect + generation-failed screen. Verified live: 11/11 — both clients receive `rideStart` with audioUrl+bpm+rideStartAt, phase=riding, same values across both clients, no userId leak. Merged to `main`, pushed.
+- **In flight:** nothing. **Next:** M4 — synced ride: PixiJS scenery, server-authoritative clock sync, drift correction (±250ms). Accept: playback position within ~250ms across two devices.
+
+---
+
 #### 2026-06-05 — M2: lobby composition
 - **Completed:** §5 recipe types + `buildPrompt()` + option constants in `/shared`; room server handles `seed`/`choice`/`ready`, validates field-to-role, broadcasts `peerChoice` to peer, advances to `generating` when both ready with all choices; `useRoom` gains `peerChoices`/`seeded`/`readyRoles`/`recipe`/`send`; `RideScreen` (connection manager, persists across phase transitions); `Compose` screen (mood-word grid, driver/passenger choice panels, live peer-choice display, Let's drive button); `Lobby` simplified to display-only. Verified live: 13/13 assertions — recipe correct, phase transitions, no userId leak (§6). Merged to `main`, pushed.
 - **In flight:** nothing.

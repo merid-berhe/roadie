@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import type { ClientMsg, Phase, Recipe, Rider, Role, RoomMsg } from '@roadie/shared';
 
-// §3: Zustand is a READ-ONLY PROJECTION of room state. `ingest` (the room-message
-// handler) is the only writer of ride-correctness fields. Components only read.
+// §3: Zustand is a READ-ONLY PROJECTION of room state. `ingest` is the only writer
+// of ride-correctness fields. Components only read.
 type RoomState = {
   connected: boolean;
   rejectedFull: boolean;
@@ -13,7 +13,14 @@ type RoomState = {
   seeded: Role[];
   readyRoles: Role[];
   recipe: Recipe | null;
-  peerChoices: Record<string, string>; // field → value, accumulated from peerChoice messages
+  peerChoices: Record<string, string>;
+  // Generation (M3)
+  audioUrl: string | null;
+  rideStartAt: number | null;
+  bpm: number | null;
+  generationFailed: boolean;
+  generationFailedReason: string | null;
+  // Plumbing
   send: (msg: ClientMsg) => void;
   ingest: (msg: RoomMsg) => void;
   setConnected: (connected: boolean) => void;
@@ -34,6 +41,11 @@ const initial = {
   readyRoles: [] as Role[],
   recipe: null as Recipe | null,
   peerChoices: {} as Record<string, string>,
+  audioUrl: null as string | null,
+  rideStartAt: null as number | null,
+  bpm: null as number | null,
+  generationFailed: false,
+  generationFailedReason: null as string | null,
   send: noop,
 };
 
@@ -56,6 +68,15 @@ export const useRoom = create<RoomState>((set) => ({
           return { rejectedFull: true };
         case 'peerChoice':
           return { peerChoices: { ...state.peerChoices, [msg.field]: msg.value } };
+        case 'rideStart':
+          return {
+            phase: 'riding',
+            audioUrl: msg.audioUrl,
+            rideStartAt: msg.rideStartAt,
+            bpm: msg.bpm,
+          };
+        case 'generationFailed':
+          return { generationFailed: true, generationFailedReason: msg.reason };
         default:
           return {};
       }
