@@ -105,6 +105,12 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ---
 
+#### 2026-06-05 — M5: gesture layer + firework finale
+- **Completed:** Server gesture rate-limit (1/s per rider), `peerGesture` relay to peer only; firework 1500ms sync window — both tap → `fireworkSynced{true}` to both, timeout → `fireworkSynced{false}` to tapper only (§8c). `audio/gestures.ts`: beat-locked tambourine/shaker/chime via `Tone.Transport.nextSubdivision('4n')`; `playFireworkAccent()` polyphonic chord sting. `player.ts`: starts Tone Transport at correct BPM when track is scheduled. `SceneCanvas`: floating gesture symbols above occupants (1.5s fade), PixiJS particle firework burst (20 single / 60 synced bloom). `Riding.tsx`: 6-button gesture row (3 warm + 3 beat-sound), firework button at 80% of ride, client-side rate limit, own/peer gesture state. Also: bug fixes — Compose "Let's drive" shows what's still missing + button visually inactive until all chosen; Riding `h-screen` fix; "new ride" escape link; SceneCanvas explicit-dims init. Verified live: 10/10 — relay, rate-limit, synced bloom, single-tap isolation. Merged to `main`, pushed.
+- **In flight:** nothing. **Next:** M6 — arrival + glovebox + instrumentation: co-name the song, save with attribution, rating + report + survey question, Glovebox list/playback, all §13 events firing.
+
+---
+
 #### 2026-06-05 — M4: synced ride + PixiJS scene
 - **Completed:** ping/pong clock offset (§9) — server returns `pong {serverTime}` immediately, client averages RTT-corrected offset across 3 pings, stored in `useRoom.clockOffset`; server broadcasts `sync {positionSec}` every 10s during riding; client drift correction in `Riding.tsx` — nudges `playbackRate` ±5% if |drift|>250ms; `audio/player.ts` uses `clockOffset` to schedule track at the right local time; `net/clock.ts` for RTT math. PixiJS v8 scene: `scene/palette.ts` (6 mood palettes, blended from both seeds §7), `scene/SceneCanvas.tsx` (3-layer double-buffer parallax, cabin frame overlay with windshield cutout + pillar darkening, occupant glyph silhouettes, clock-synced scroll). `Riding.tsx`: full screen scene + progress bar + mood attribution HUD. `RideScreen.tsx`: pings on connect. Verified live: 9/9 — pong format correct, sync fires on schedule, positionSec accurate to 0.00s error. Merged to `main`, pushed.
 - **In flight:** nothing. **Next:** M5 — gesture layer + firework finale: warm reactions (wave/headlights/heart), beat-locked sounds (Tone.js quantised to next beat), co-launched firework with 1500ms sync window.
