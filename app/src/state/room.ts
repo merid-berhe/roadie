@@ -28,8 +28,9 @@ type RoomState = {
   // Gestures (M5, §8)
   peerGestureKind: GestureKind | null;
   peerGestureAt: number;     // Date.now() when last peerGesture arrived
-  fireworkSynced: boolean | null;  // null until first fireworkSynced message
-  fireworkAt: number;        // Date.now() when fireworkSynced arrived
+  fireworkSynced: boolean | null;
+  fireworkAt: number;
+  peerNameWord: string | null;
   // Plumbing
   send: (msg: ClientMsg) => void;
   ingest: (msg: RoomMsg) => void;
@@ -63,6 +64,7 @@ const initial = {
   peerGestureAt: 0,
   fireworkSynced: null as boolean | null,
   fireworkAt: 0,
+  peerNameWord: null as string | null,  // peer's contribution to the song title (arrival)
   send: noop,
 };
 
@@ -102,6 +104,8 @@ export const useRoom = create<RoomState>((set) => ({
           return { peerGestureKind: msg.kind, peerGestureAt: Date.now() };
         case 'fireworkSynced':
           return { fireworkSynced: msg.synced, fireworkAt: Date.now() };
+        case 'nameWord':
+          return { peerNameWord: msg.word };
         default:
           return {};
       }
