@@ -34,8 +34,13 @@ export default function Compose() {
   const optionKeys = Object.keys(options) as Array<keyof typeof options>;
   const peerOptionKeys = Object.keys(peerOptions) as Array<keyof typeof peerOptions>;
 
-  const allOwnChosen =
-    ownSeed !== null && optionKeys.every((k) => ownChoices[k as keyof AnyChoices] !== undefined);
+  const missingItems: string[] = [];
+  if (ownSeed === null) missingItems.push('a mood word');
+  for (const k of optionKeys) {
+    if (ownChoices[k as keyof AnyChoices] === undefined)
+      missingItems.push((k as string).replace('_', ' '));
+  }
+  const allOwnChosen = missingItems.length === 0;
 
   function pickSeed(word: string) {
     setOwnSeed(word);
@@ -133,11 +138,18 @@ export default function Compose() {
       )}
 
       {/* Let's drive */}
-      <div className="fixed bottom-6 left-0 right-0 flex justify-center px-5">
+      <div className="fixed bottom-6 left-0 right-0 flex flex-col items-center gap-2 px-5">
+        {!allOwnChosen && missingItems.length > 0 && (
+          <p className="text-xs text-white/40">still need: {missingItems.join(', ')}</p>
+        )}
         <button
           onClick={goReady}
-          disabled={!allOwnChosen || isReady}
-          className="w-full max-w-xs rounded-full bg-amber-400 py-4 text-lg font-semibold text-black transition active:scale-95 disabled:opacity-30"
+          disabled={isReady}
+          className="w-full max-w-xs rounded-full py-4 text-lg font-semibold transition active:scale-95"
+          style={{
+            background: allOwnChosen ? '#F5A623' : 'rgba(255,255,255,0.1)',
+            color: allOwnChosen ? '#000' : 'rgba(255,255,255,0.3)',
+          }}
         >
           {isReady ? 'waiting for co-rider…' : "Let's drive"}
         </button>
