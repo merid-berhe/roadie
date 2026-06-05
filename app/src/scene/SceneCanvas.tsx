@@ -38,20 +38,33 @@ export default function SceneCanvas({ palette, positionSec, driverGlyph, driverC
     let destroyed = false;
 
     (async () => {
-      app = new Application();
-      await app.init({
-        resizeTo: el,
-        background: 0x000000,
-        backgroundAlpha: 0,  // sky is CSS so canvas is transparent
-        antialias: true,
-        resolution: Math.min(window.devicePixelRatio, 2),
-        autoDensity: true,
-      });
-      if (destroyed) { app.destroy(true); return; }
-      el.appendChild(app.canvas as HTMLCanvasElement);
+      try {
+        // Use explicit dims — resizeTo can get 0 if layout hasn't settled yet
+        const rect = el.getBoundingClientRect();
+        const W0 = Math.round(rect.width)  || window.innerWidth;
+        const H0 = Math.round(rect.height) || window.innerHeight;
 
-      const W = app.screen.width;
-      const H = app.screen.height;
+        app = new Application();
+        await app.init({
+          width: W0,
+          height: H0,
+          background: 'transparent',
+          antialias: true,
+          resolution: Math.min(window.devicePixelRatio, 2),
+          autoDensity: true,
+        });
+        if (destroyed) { app.destroy(true); return; }
+
+        const canvas = app.canvas as HTMLCanvasElement;
+        canvas.style.position = 'absolute';
+        canvas.style.inset = '0';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        el.appendChild(canvas);
+
+        const W = app.screen.width;
+        const H = app.screen.height;
+        console.log(`[scene] PixiJS ${W}×${H}`);
 
       // Windshield area: upper 68% of the canvas
       const winY = Math.round(H * 0.08);
@@ -95,16 +108,19 @@ export default function SceneCanvas({ palette, positionSec, driverGlyph, driverC
 
       // --- Ticker: advance scroll each frame ---
       let prevPos = posRef.current;
-      app.ticker.add(() => {
-        const pos = posRef.current;
-        const delta = pos - prevPos;
-        prevPos = pos;
-        if (delta <= 0) return;
+        app.ticker.add(() => {
+          const pos = posRef.current;
+          const delta = pos - prevPos;
+          prevPos = pos;
+          if (delta <= 0) return;
 
-        scrollLayer(farPair,  W, SPEEDS.far  * delta);
-        scrollLayer(midPair,  W, SPEEDS.mid  * delta);
-        scrollLayer(nearPair, W, SPEEDS.near * delta);
-      });
+          scrollLayer(farPair,  W, SPEEDS.far  * delta);
+          scrollLayer(midPair,  W, SPEEDS.mid  * delta);
+          scrollLayer(nearPair, W, SPEEDS.near * delta);
+        });
+      } catch (err) {
+        console.error('[scene] PixiJS init failed:', err);
+      }
     })();
 
     return () => {
