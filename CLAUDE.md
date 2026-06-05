@@ -101,16 +101,33 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ### Session Log
 
-<!-- Most recent at the top. Append new entries above the marker. -->
+<!-- Most recent at the top. Append new entries above this line. -->
 
-#### 2026-06-05 — Spec import + initial evaluation/architecture
-- **Completed:** Imported Build Spec v3 as `masterRule.md` (canonical) and created `CLAUDE.md` operating guide. Verified the two "check at build time" dependencies: PartyKit is alive (Cloudflare-owned, Durable-Object-backed; `partyserver` is the native fallback) — no change needed. Generation API verified — see open decision below.
-- **Architecture decisions taken (defaults, simplicity bar):** pnpm workspaces monorepo per §17; `/shared` holds §15 message types + §5 recipe types + `buildPrompt()`; generation call folded into the PartyKit room (fal key as Cloudflare secret) — dropping a standalone `/server`; analytics via Supabase `events` table (PostHog deferred); Vitest as test runner.
-- **RESOLVED DECISION (recorded in masterRule.md v3.1):** Ride shortened to **~2 min** on **MiniMax via fal.ai**, behind the `MusicGenerator` adapter. This collapses the duration problem into one official single-call generation (no looping/borrowed-track gymnastics). Suno was evaluated — best quality/length but **no official public API** (resellers only → vendor-fragility), so it's kept as the deferred quality upgrade behind the adapter.
-- **Flagged (still open):** CLAUDE.md §5 references `python -m pytest tests/unit/` — wrong for an all-TS repo; proposed fix to `pnpm test` (Vitest), awaiting confirmation. Stray empty `roadie` file at repo root (not created by us) — flagged, not deleted.
-- **Tooling deviation (2026-06-05):** Using **npm workspaces**, not pnpm — corepack can't symlink pnpm into `/usr/local/bin` without sudo in this env, and npm 11 is already present and sufficient. masterRule.md unaffected (package manager isn't a product/architecture decision). Stray empty `roadie` file removed; CLAUDE.md §5 health check fixed to `npm test`.
-- **M0 DONE (build-verified):** npm-workspace monorepo (`/shared`, `/app`); `@roadie/shared` identity (glyph palette + stable `deriveIdentity`); Vite+React+TS+Tailwind v4+Vitest app; "Get in" → Tone audio unlock + idle hum + statechange slashed-speaker indicator (`AudioIndicator`); Supabase anon auth + best-effort `users` upsert with local-UUID fallback; 18+ self-attest gate. `npm test` (2 pass) / `typecheck` / `build` all green; dev server serves on LAN. Note: Tone makes the bundle ~644kB — code-split later.
-- **Awaiting manual check (user, real iPhone/Safari):** AudioContext `running` after the tap (idle hum audible); identity stable across refresh.
-- **M1 DONE (verified live):** `/party` PartyKit room (v0.0.115) — join, server-authoritative role assignment (first in = driver), presence broadcast, disconnect handling; §15 message types in `/shared`; app `/net` PartySocket client + `useRoom` store (read-only projection, §3) + invite-link room codes (`?room=`); Lobby presence screen + identity-gated routing; dead M0 "you're in" screen removed. Two-client harness test: both see 2 riders, correct roles, each other's glyph, full=true, and **no user_id leaked to peers (§6)**. typecheck/test/build all green. On branch `m1-room-pairing` (not yet committed/merged).
-- **M2 DONE (verified live, 13/13 assertions):** §5 recipe types + `buildPrompt()` + constants in `/shared`; room server handles `seed`/`choice`/`ready`, validates field-to-role, broadcasts `peerChoice` to peer, advances to `generating` when both ready; `useRoom` gains `peerChoices`/`seeded`/`readyRoles`/`recipe`/`send`; `RideScreen` (connection manager, persists across phase transitions) + simplified `Lobby` + `Compose` screen (mood grid, role-specific choice panels, live peer-choice display, Let's drive). typecheck/test/build green. On branch `m2-lobby-composition`.
-- **Next:** commit + push M2, then M3 — generation + latency mask (fal.ai MiniMax call, procedural ambient bed, crossfade to generated track on `rideStart`).
+---
+
+#### 2026-06-05 — M2: lobby composition
+- **Completed:** §5 recipe types + `buildPrompt()` + option constants in `/shared`; room server handles `seed`/`choice`/`ready`, validates field-to-role, broadcasts `peerChoice` to peer, advances to `generating` when both ready with all choices; `useRoom` gains `peerChoices`/`seeded`/`readyRoles`/`recipe`/`send`; `RideScreen` (connection manager, persists across phase transitions); `Compose` screen (mood-word grid, driver/passenger choice panels, live peer-choice display, Let's drive button); `Lobby` simplified to display-only. Verified live: 13/13 assertions — recipe correct, phase transitions, no userId leak (§6). Merged to `main`, pushed.
+- **In flight:** nothing.
+- **Next:** M3 — generation + latency mask. fal.ai MiniMax call in the room, procedural ambient bed, crossfade to generated track on `rideStart`.
+
+---
+
+#### 2026-06-05 — M1: room & pairing
+- **Completed:** `/party` PartyKit room (v0.0.115) — join, server-authoritative role assignment (first in = driver), presence broadcast, disconnect handling; §15 `ClientMsg`/`RoomMsg` types in `/shared`; `PartySocket` client wrapper + `useRoom` store (read-only projection of room state, §3); invite-link room codes (`?room=`); `Lobby` presence screen + identity-gated routing. Two-client harness test: 8/8 assertions — both see 2 riders, correct roles, each other's glyph, `full=true`, no `userId` leak (§6). Merged to `main`, pushed. Remote URL corrected to `github.com/merid-berhe/roadie.git`.
+- **In flight:** nothing.
+- **Next:** M2 — lobby composition.
+
+---
+
+#### 2026-06-05 — M0: skeleton
+- **Completed:** npm-workspace monorepo (`/shared`, `/app`); `@roadie/shared` identity (glyph palette + stable `deriveIdentity`); Vite+React+TS+Tailwind v4+Vitest; "Get in" → Tone audio unlock + idle engine hum + `statechange` slashed-speaker indicator (§11); Supabase anon auth + best-effort `users` upsert with local-UUID fallback; 18+ self-attest gate. `npm test` (2/2) / `typecheck` / `build` all green; dev server serves on LAN (`host: true`). Committed to `main`.
+- **Awaiting manual check (user):** AudioContext `running` after tap on real iPhone/Safari (idle hum audible); identity stable across refresh.
+- **Next:** M1 — room & pairing.
+
+---
+
+#### 2026-06-05 — Spec import, evaluation, architecture decisions
+- **Completed:** Build Spec v3 imported as `masterRule.md`; `CLAUDE.md` operating guide created. Verified "check at build time" dependencies: PartyKit alive (Cloudflare-owned, DO-backed) ✅; MiniMax duration cap ~60–90s/call discovered ⚠️ — ride shortened to ~2 min (see decision below).
+- **Decisions (recorded in masterRule.md v3.1):** Ride ~2 min on **MiniMax via fal.ai** behind `MusicGenerator` adapter. Suno evaluated — best quality but no official public API (resellers only → vendor-fragility §19), kept as deferred upgrade. npm workspaces instead of pnpm (corepack needs sudo). Analytics → Supabase `events` table (PostHog deferred). Generation call folded into PartyKit room. Stray empty `roadie` file removed; CLAUDE.md §5 health check fixed from `python -m pytest` → `npm test`.
+- **In flight:** nothing.
+- **Next:** M0 — skeleton.
