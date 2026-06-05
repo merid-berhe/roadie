@@ -105,6 +105,13 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ---
 
+#### 2026-06-05 — M6: arrival + glovebox + §13 instrumentation ✅ MVP COMPLETE
+- **Completed:** `supabase/schema.sql` (§14 full schema — users/rides/songs/glovebox_entries/reports/events + RLS); `lib/analytics.ts` (best-effort `track()` → Supabase events); `Arrival.tsx` (each rider submits a word, song titled + saved with §5 recipe attribution); `PostRide.tsx` (§13 validation question "Definitely/Sort of/Not really", positive token rating, report path, events fired); `Glovebox.tsx` (list + play saved songs, `song_replayed` event); `RideScreen.tsx`: full §13 tuning-phase funnel (`tuning_started`, `tuning_Xs_reached`, `tuning_completed`) + `paired`, `ride_started`, `ride_completed` + arrival phase routing + post-ride flow (arrival → post-ride → glovebox). Party server: `arrival` phase after 120s, `nameWord` relay. typecheck clean / tests 2/2 / build green. Merged to `main`, pushed.
+- **In flight:** nothing.
+- **Next:** set up Supabase project + add keys to `app/.env.local`; run the schema SQL; test a full two-phone session with real generation (`FAL_KEY` in `party/.dev.vars`); evaluate against §13 pre-registered success signals.
+
+---
+
 #### 2026-06-05 — M5: gesture layer + firework finale
 - **Completed:** Server gesture rate-limit (1/s per rider), `peerGesture` relay to peer only; firework 1500ms sync window — both tap → `fireworkSynced{true}` to both, timeout → `fireworkSynced{false}` to tapper only (§8c). `audio/gestures.ts`: beat-locked tambourine/shaker/chime via `Tone.Transport.nextSubdivision('4n')`; `playFireworkAccent()` polyphonic chord sting. `player.ts`: starts Tone Transport at correct BPM when track is scheduled. `SceneCanvas`: floating gesture symbols above occupants (1.5s fade), PixiJS particle firework burst (20 single / 60 synced bloom). `Riding.tsx`: 6-button gesture row (3 warm + 3 beat-sound), firework button at 80% of ride, client-side rate limit, own/peer gesture state. Also: bug fixes — Compose "Let's drive" shows what's still missing + button visually inactive until all chosen; Riding `h-screen` fix; "new ride" escape link; SceneCanvas explicit-dims init. Verified live: 10/10 — relay, rate-limit, synced bloom, single-tap isolation. Merged to `main`, pushed.
 - **In flight:** nothing. **Next:** M6 — arrival + glovebox + instrumentation: co-name the song, save with attribution, rating + report + survey question, Glovebox list/playback, all §13 events firing.
