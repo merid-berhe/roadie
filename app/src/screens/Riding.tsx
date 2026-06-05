@@ -64,6 +64,12 @@ export default function Riding() {
 
       {/* Minimal HUD — anchored to the cabin frame bottom area */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center gap-2 pb-6 pt-4">
+        <a
+          href={location.pathname}
+          className="pointer-events-auto text-xs text-white/20 underline-offset-2 hover:text-white/40"
+        >
+          new ride
+        </a>
         {/* Progress bar */}
         <div className="h-0.5 w-3/4 rounded-full bg-white/10">
           <div

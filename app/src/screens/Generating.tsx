@@ -44,6 +44,12 @@ export default function Generating() {
         <p className="text-sm text-white/60">tuning your station…</p>
         <p className="text-xs text-white/30">your song is being made</p>
       </div>
+      <a
+        href={location.pathname}
+        className="mt-8 text-xs text-white/20 underline-offset-2 hover:text-white/40"
+      >
+        new ride
+      </a>
 
       <style>{`
         @keyframes pulse {
