@@ -1,3 +1,4 @@
 // @roadie/shared — the contract spine imported by both client and room.
-// M0: identity only. M1/M2 add §15 message types + §5 recipe types + buildPrompt().
+// M0: identity. M1: §15 message types. M2 adds §5 recipe types + buildPrompt().
 export * from './identity';
+export * from './messages';

@@ -1,0 +1,17 @@
+{
+  "name": "@roadie/party",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "partykit dev",
+    "deploy": "partykit deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@roadie/shared": "*"
+  },
+  "devDependencies": {
+    "partykit": "^0.0.115"
+  }
+}
