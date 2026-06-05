@@ -2,12 +2,12 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2022"],
-    "types": [],
+    "types": ["@cloudflare/workers-types"],
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@roadie/shared": ["../shared/src/index.ts"]
     }
   },
-  "include": ["server.ts"]
+  "include": ["server.ts", "music.ts"]
 }

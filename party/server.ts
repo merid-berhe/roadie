@@ -8,6 +8,7 @@ import {
   type PassengerChoices,
   type Recipe,
 } from '@roadie/shared';
+import { FalMiniMaxGenerator, MockMusicGenerator, type MusicGenerator, type MusicGeneratorInput } from './music';
 
 type Participant = {
   userId: string; // server-side only — never sent to peer (§6)
@@ -16,35 +17,36 @@ type Participant = {
   color: string;
 };
 
-/**
- * One PartyKit room per ride. Single source of truth (§3): owns presence, roles,
- * composition state, clock, and generation trigger (M3+).
- */
 export default class RideRoom implements Party.Server {
-  private participants = new Map<string, Participant>(); // connId → participant
+  private participants = new Map<string, Participant>();
   private phase: Phase = 'lobby';
 
-  // Composition state (M2)
-  private seeds = new Map<string, string>(); // connId → mood word
+  // Composition (M2)
+  private seeds = new Map<string, string>();
   private driverChoices: Partial<DriverChoices> = {};
   private passengerChoices: Partial<PassengerChoices> = {};
   private readyConnIds = new Set<string>();
   private generationInput: ReturnType<typeof buildPrompt> | null = null;
 
-  constructor(readonly room: Party.Room) {}
+  // Generation (M3)
+  private audioUrl: string | null = null;
+  private rideStartAt: number | null = null;
+  private readonly generator: MusicGenerator;
+
+  constructor(readonly room: Party.Room) {
+    const falKey = room.env['FAL_KEY'] as string | undefined;
+    this.generator = falKey ? new FalMiniMaxGenerator(falKey) : new MockMusicGenerator();
+    if (!falKey) console.log('[room] no FAL_KEY — using MockMusicGenerator');
+  }
 
   onMessage(raw: string, sender: Party.Connection): void {
     let msg: ClientMsg;
-    try {
-      msg = JSON.parse(raw) as ClientMsg;
-    } catch {
-      return;
-    }
+    try { msg = JSON.parse(raw) as ClientMsg; } catch { return; }
     switch (msg.t) {
-      case 'join':    return this.handleJoin(msg, sender);
-      case 'seed':    return this.handleSeed(msg, sender);
-      case 'choice':  return this.handleChoice(msg, sender);
-      case 'ready':   return this.handleReady(sender);
+      case 'join':   return this.handleJoin(msg, sender);
+      case 'seed':   return this.handleSeed(msg, sender);
+      case 'choice': return this.handleChoice(msg, sender);
+      case 'ready':  return this.handleReady(sender);
     }
   }
 
@@ -61,16 +63,20 @@ export default class RideRoom implements Party.Server {
   private handleJoin(msg: Extract<ClientMsg, { t: 'join' }>, sender: Party.Connection): void {
     const existing = this.participants.get(sender.id);
     if (existing) {
-      existing.userId = msg.userId;
-      existing.glyph = msg.glyph;
-      existing.color = msg.color;
+      existing.userId = msg.userId; existing.glyph = msg.glyph; existing.color = msg.color;
     } else {
       if (this.participants.size >= 2) {
-        sender.send(JSON.stringify({ t: 'roomFull' } satisfies RoomMsg));
-        return;
+        sender.send(JSON.stringify({ t: 'roomFull' } satisfies RoomMsg)); return;
       }
       const role: Role = this.roleTaken('driver') ? 'passenger' : 'driver';
       this.participants.set(sender.id, { userId: msg.userId, role, glyph: msg.glyph, color: msg.color });
+    }
+    // Re-send rideStart to a reconnecting client if ride is already underway (§9)
+    if (this.phase === 'riding' && this.audioUrl && this.rideStartAt) {
+      sender.send(JSON.stringify({
+        t: 'rideStart', audioUrl: this.audioUrl, source: 'own',
+        rideStartAt: this.rideStartAt, bpm: this.generationInput!.bpm,
+      } satisfies RoomMsg));
     }
     this.broadcastState();
   }
@@ -88,18 +94,13 @@ export default class RideRoom implements Party.Server {
   private handleChoice(msg: Extract<ClientMsg, { t: 'choice' }>, sender: Party.Connection): void {
     const p = this.participants.get(sender.id);
     if (!p || this.phase !== 'lobby') return;
-
     const driverFields = Object.keys(DRIVER_OPTIONS) as Array<keyof DriverChoices>;
     const passengerFields = Object.keys(PASSENGER_OPTIONS) as Array<keyof PassengerChoices>;
-
     if (p.role === 'driver' && driverFields.includes(msg.field as keyof DriverChoices)) {
       (this.driverChoices as Record<string, string>)[msg.field] = msg.value;
     } else if (p.role === 'passenger' && passengerFields.includes(msg.field as keyof PassengerChoices)) {
       (this.passengerChoices as Record<string, string>)[msg.field] = msg.value;
-    } else {
-      return; // wrong field for this role — ignore
-    }
-
+    } else { return; }
     this.broadcastToPeer(sender.id, { t: 'peerChoice', glyph: p.glyph, field: msg.field, value: msg.value });
     this.broadcastState();
   }
@@ -108,10 +109,64 @@ export default class RideRoom implements Party.Server {
     if (!this.hasAllChoices(sender.id) || this.phase !== 'lobby') return;
     this.readyConnIds.add(sender.id);
     this.broadcastState();
-
     if (this.readyConnIds.size === 2 && this.participants.size === 2) {
       const allComplete = [...this.participants.keys()].every((id) => this.hasAllChoices(id));
       if (allComplete) this.advanceToGenerating();
+    }
+  }
+
+  // --- generation (M3) ---
+
+  private advanceToGenerating(): void {
+    const driverConn = this.getConnIdForRole('driver');
+    const passengerConn = this.getConnIdForRole('passenger');
+    if (!driverConn || !passengerConn) return;
+    const seedDriver = this.seeds.get(driverConn);
+    const seedPassenger = this.seeds.get(passengerConn);
+    if (!seedDriver || !seedPassenger) return;
+
+    this.generationInput = buildPrompt(
+      seedDriver, seedPassenger,
+      this.driverChoices as DriverChoices,
+      this.passengerChoices as PassengerChoices,
+    );
+    this.phase = 'generating';
+    this.broadcastState();
+
+    // Fire async — room continues handling messages while this runs (§15 happy path)
+    this.runGeneration(this.generationInput).catch((err: unknown) =>
+      console.error('[room] runGeneration unexpected error:', err),
+    );
+  }
+
+  private async runGeneration(input: MusicGeneratorInput): Promise<void> {
+    console.log(`[room] generation_requested prompt="${input.prompt.slice(0, 60)}…"`);
+    try {
+      const result = await this.generator.generate(input);
+      console.log(`[room] generation_succeeded latency_ms=${result.latencyMs}`);
+
+      this.audioUrl = result.audioUrl;
+      this.rideStartAt = Date.now() + 2_000; // 2s buffer for clients to load (M4: proper clock sync)
+      this.phase = 'riding';
+
+      // Broadcast rideStart first (triggers audio), then state (triggers routing)
+      const rideStartMsg: RoomMsg = {
+        t: 'rideStart', audioUrl: result.audioUrl, source: 'own',
+        rideStartAt: this.rideStartAt, bpm: input.bpm,
+      };
+      for (const connId of this.participants.keys()) {
+        this.room.getConnection(connId)?.send(JSON.stringify(rideStartMsg));
+      }
+      this.broadcastState();
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[room] generation_failed reason="${reason}"`);
+      // §13: emit generation_failed; clients show "studio was busy" (§16 borrowed-track is DEFERRED)
+      for (const connId of this.participants.keys()) {
+        this.room.getConnection(connId)?.send(
+          JSON.stringify({ t: 'generationFailed', reason } satisfies RoomMsg),
+        );
+      }
     }
   }
 
@@ -128,37 +183,13 @@ export default class RideRoom implements Party.Server {
     return !!(lead_instrument && brightness && texture);
   }
 
-  private advanceToGenerating(): void {
-    const driverConn = this.getConnIdForRole('driver');
-    const passengerConn = this.getConnIdForRole('passenger');
-    if (!driverConn || !passengerConn) return;
-
-    const seedDriver = this.seeds.get(driverConn);
-    const seedPassenger = this.seeds.get(passengerConn);
-    if (!seedDriver || !seedPassenger) return;
-
-    this.generationInput = buildPrompt(
-      seedDriver,
-      seedPassenger,
-      this.driverChoices as DriverChoices,
-      this.passengerChoices as PassengerChoices,
-    );
-    this.phase = 'generating';
-    // M3: trigger MusicGenerator.generate(this.generationInput) here
-    this.broadcastState();
-  }
-
   private getConnIdForRole(role: Role): string | null {
-    for (const [connId, p] of this.participants) {
-      if (p.role === role) return connId;
-    }
+    for (const [connId, p] of this.participants) { if (p.role === role) return connId; }
     return null;
   }
 
   private roleTaken(role: Role): boolean {
-    for (const p of this.participants.values()) {
-      if (p.role === role) return true;
-    }
+    for (const p of this.participants.values()) { if (p.role === role) return true; }
     return false;
   }
 
@@ -170,20 +201,19 @@ export default class RideRoom implements Party.Server {
 
   private seededRoles(): Role[] {
     return [...this.seeds.keys()]
-      .map((connId) => this.participants.get(connId)?.role)
+      .map((id) => this.participants.get(id)?.role)
       .filter((r): r is Role => r !== undefined);
   }
 
   private readyRolesArr(): Role[] {
     return [...this.readyConnIds]
-      .map((connId) => this.participants.get(connId)?.role)
+      .map((id) => this.participants.get(id)?.role)
       .filter((r): r is Role => r !== undefined);
   }
 
   private broadcastToPeer(senderConnId: string, msg: RoomMsg): void {
     for (const connId of this.participants.keys()) {
-      if (connId === senderConnId) continue;
-      this.room.getConnection(connId)?.send(JSON.stringify(msg));
+      if (connId !== senderConnId) this.room.getConnection(connId)?.send(JSON.stringify(msg));
     }
   }
 
@@ -193,7 +223,6 @@ export default class RideRoom implements Party.Server {
     const seeded = this.seededRoles();
     const readyRoles = this.readyRolesArr();
     const recipe: Recipe | undefined = this.generationInput?.recipe;
-
     for (const [connId, p] of this.participants) {
       const msg: RoomMsg = { t: 'state', phase: this.phase, you: p.role, riders, full, seeded, readyRoles, recipe };
       this.room.getConnection(connId)?.send(JSON.stringify(msg));

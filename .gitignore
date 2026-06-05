@@ -10,3 +10,4 @@ build/
 .partykit/
 coverage/
 *.log
+party/.dev.vars
