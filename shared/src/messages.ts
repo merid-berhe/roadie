@@ -43,6 +43,7 @@ export type RoomMsg =
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
   | { t: 'generationFailed'; reason: string }
   | { t: 'pong'; sentAt: number; serverTime: number }
+  | { t: 'nameWord'; glyph: string; word: string }  // peer submitted a name word (arrival)
   // --- M3+ ---
   | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }

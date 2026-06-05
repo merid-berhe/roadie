@@ -58,6 +58,7 @@ export default class RideRoom implements Party.Server {
       case 'ping':    return this.handlePing(msg, sender);
       case 'gesture': return this.handleGesture(msg, sender);
       case 'firework':return this.handleFirework(sender);
+      case 'name':    return this.handleName(msg, sender);
     }
   }
 
@@ -173,6 +174,7 @@ export default class RideRoom implements Party.Server {
         this.room.getConnection(connId)?.send(JSON.stringify(rideStartMsg));
       }
       this.startSyncInterval();
+      this.scheduleArrival();
       this.broadcastState();
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -229,6 +231,22 @@ export default class RideRoom implements Party.Server {
 
   private handlePing(msg: Extract<ClientMsg, { t: 'ping' }>, sender: Party.Connection): void {
     sender.send(JSON.stringify({ t: 'pong', sentAt: msg.sentAt, serverTime: Date.now() } satisfies RoomMsg));
+  }
+
+  private scheduleArrival(): void {
+    // Advance to arrival after the ride duration (120s = §5 durationSec)
+    setTimeout(() => {
+      if (this.phase !== 'riding') return;
+      this.phase = 'arrival';
+      if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; }
+      this.broadcastState();
+    }, 120_000);
+  }
+
+  private handleName(msg: Extract<ClientMsg, { t: 'name' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || this.phase !== 'arrival') return;
+    this.broadcastToPeer(sender.id, { t: 'nameWord', glyph: p.glyph, word: msg.word });
   }
 
   private startSyncInterval(): void {
