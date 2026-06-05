@@ -1,0 +1,19 @@
+{
+  "name": "roadie",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Roadie — two strangers compose a song and ride along to it. MVP validation prototype.",
+  "workspaces": [
+    "shared",
+    "app"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @roadie/app",
+    "build": "npm run build -w @roadie/app",
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
