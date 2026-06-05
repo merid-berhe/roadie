@@ -44,6 +44,12 @@ export async function loadAndCrossfade(
     trackSource.start(ctx.currentTime + delaySec);
     localStartTime = Date.now() + delayMs;
 
+    // Start the Tone Transport in sync with the track so gesture sounds land on beats (§8b)
+    Tone.Transport.bpm.value = _bpm;
+    if (Tone.Transport.state !== 'started') {
+      Tone.Transport.start(`+${delaySec}`);
+    }
+
     const crossfadeSec = 3;
     setTimeout(() => {
       fadeBedOut(crossfadeSec);
