@@ -13,6 +13,7 @@
   "dependencies": {
     "@roadie/shared": "*",
     "@supabase/supabase-js": "^2.45.0",
+    "partysocket": "^1.1.19",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tone": "^15.0.4",

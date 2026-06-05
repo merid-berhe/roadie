@@ -4,7 +4,6 @@ import { ensureIdentity } from '../auth/identity';
 import { useSession } from '../state/session';
 
 export default function GetIn() {
-  const identity = useSession((s) => s.identity);
   const setIdentity = useSession((s) => s.setIdentity);
   const setAudioState = useSession((s) => s.setAudioState);
 
@@ -29,25 +28,6 @@ export default function GetIn() {
     } finally {
       setEntering(false);
     }
-  }
-
-  if (identity) {
-    return (
-      <main className="flex min-h-full flex-col items-center justify-center gap-6 bg-[#0b1020] text-white">
-        <p className="text-sm uppercase tracking-widest text-white/50">you're in</p>
-        <div
-          className="text-7xl leading-none"
-          style={{ color: identity.color }}
-          aria-label={`your glyph: ${identity.colorName}`}
-        >
-          {identity.glyph}
-        </div>
-        <p className="text-white/60">engine's running — {identity.colorName} rider</p>
-        <p className="max-w-xs text-center text-xs text-white/30">
-          refresh the page — you'll come back as the same {identity.colorName} {identity.glyph}.
-        </p>
-      </main>
-    );
   }
 
   return (
