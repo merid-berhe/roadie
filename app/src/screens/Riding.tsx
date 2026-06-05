@@ -49,7 +49,7 @@ export default function Riding() {
 
   return (
     <div
-      className="relative min-h-full overflow-hidden"
+      className="relative h-screen overflow-hidden"
       style={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBottom})` }}
     >
       {/* PixiJS scene fills the container */}
