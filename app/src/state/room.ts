@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ClientMsg, Phase, Recipe, Rider, Role, RoomMsg } from '@roadie/shared';
+import type { ClientMsg, GestureKind, Phase, Recipe, Rider, Role, RoomMsg } from '@roadie/shared';
 import { offsetFromPong } from '../net/clock';
 
 // §3: Zustand is a READ-ONLY PROJECTION of room state. `ingest` is the only writer
@@ -22,9 +22,14 @@ type RoomState = {
   generationFailed: boolean;
   generationFailedReason: string | null;
   // Clock sync (M4, §9)
-  clockOffset: number;        // serverTime - localTime (ms); 0 until first pong
-  clockSamples: number;       // how many pong samples averaged in
-  syncPositionSec: number | null; // last positionSec from server sync broadcast
+  clockOffset: number;
+  clockSamples: number;
+  syncPositionSec: number | null;
+  // Gestures (M5, §8)
+  peerGestureKind: GestureKind | null;
+  peerGestureAt: number;     // Date.now() when last peerGesture arrived
+  fireworkSynced: boolean | null;  // null until first fireworkSynced message
+  fireworkAt: number;        // Date.now() when fireworkSynced arrived
   // Plumbing
   send: (msg: ClientMsg) => void;
   ingest: (msg: RoomMsg) => void;
@@ -54,6 +59,10 @@ const initial = {
   clockOffset: 0,
   clockSamples: 0,
   syncPositionSec: null as number | null,
+  peerGestureKind: null as GestureKind | null,
+  peerGestureAt: 0,
+  fireworkSynced: null as boolean | null,
+  fireworkAt: 0,
   send: noop,
 };
 
@@ -89,6 +98,10 @@ export const useRoom = create<RoomState>((set) => ({
         }
         case 'sync':
           return { syncPositionSec: msg.positionSec };
+        case 'peerGesture':
+          return { peerGestureKind: msg.kind, peerGestureAt: Date.now() };
+        case 'fireworkSynced':
+          return { fireworkSynced: msg.synced, fireworkAt: Date.now() };
         default:
           return {};
       }

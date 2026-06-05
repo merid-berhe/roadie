@@ -36,6 +36,11 @@ export default class RideRoom implements Party.Server {
   // Clock sync (M4) — §9
   private syncTimer: ReturnType<typeof setInterval> | null = null;
 
+  // Gestures (M5) — §8
+  private lastGestureMs = new Map<string, number>(); // connId → last gesture timestamp
+  private fireworkWindow: { connId: string; at: number } | null = null;
+  private fireworkTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(readonly room: Party.Room) {
     const falKey = room.env['FAL_KEY'] as string | undefined;
     this.generator = falKey ? new FalMiniMaxGenerator(falKey) : new MockMusicGenerator();
@@ -50,7 +55,9 @@ export default class RideRoom implements Party.Server {
       case 'seed':   return this.handleSeed(msg, sender);
       case 'choice': return this.handleChoice(msg, sender);
       case 'ready':  return this.handleReady(sender);
-      case 'ping':   return this.handlePing(msg, sender);
+      case 'ping':    return this.handlePing(msg, sender);
+      case 'gesture': return this.handleGesture(msg, sender);
+      case 'firework':return this.handleFirework(sender);
     }
   }
 
@@ -174,6 +181,45 @@ export default class RideRoom implements Party.Server {
       for (const connId of this.participants.keys()) {
         this.room.getConnection(connId)?.send(
           JSON.stringify({ t: 'generationFailed', reason } satisfies RoomMsg),
+        );
+      }
+    }
+  }
+
+  // --- gestures (M5, §8) ---
+
+  private handleGesture(msg: Extract<ClientMsg, { t: 'gesture' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || this.phase !== 'riding') return;
+    // Rate-limit: max one gesture per second per rider (§8)
+    const now = Date.now();
+    if (now - (this.lastGestureMs.get(sender.id) ?? 0) < 1000) return;
+    this.lastGestureMs.set(sender.id, now);
+    this.broadcastToPeer(sender.id, { t: 'peerGesture', glyph: p.glyph, kind: msg.kind });
+  }
+
+  private handleFirework(sender: Party.Connection): void {
+    if (this.phase !== 'riding') return;
+    if (!this.fireworkWindow) {
+      // First tap — open the 1500ms sync window (§8c)
+      this.fireworkWindow = { connId: sender.id, at: Date.now() };
+      this.fireworkTimer = setTimeout(() => {
+        // Only one tapped — send single firework to them (inaction is never punished)
+        this.room.getConnection(this.fireworkWindow!.connId)?.send(
+          JSON.stringify({ t: 'fireworkSynced', synced: false } satisfies RoomMsg),
+        );
+        this.fireworkWindow = null;
+        this.fireworkTimer = null;
+      }, 1500);
+    } else {
+      // Second tap within window — synced bloom to BOTH (§8c)
+      if (this.fireworkTimer) clearTimeout(this.fireworkTimer);
+      const firstConnId = this.fireworkWindow.connId;
+      this.fireworkWindow = null;
+      this.fireworkTimer = null;
+      for (const connId of [firstConnId, sender.id]) {
+        this.room.getConnection(connId)?.send(
+          JSON.stringify({ t: 'fireworkSynced', synced: true } satisfies RoomMsg),
         );
       }
     }
