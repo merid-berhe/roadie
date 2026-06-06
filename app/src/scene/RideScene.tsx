@@ -192,12 +192,11 @@ function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number
   return (
     <>
       <color attach="background" args={[bgColor]} />
-      <ambientLight intensity={road === 'city' ? 0.4 : 1.4} />
+      <ambientLight intensity={road === 'city' ? 1.2 : 2.5} />
       <directionalLight
-        position={road === 'city' ? [2, 6, 3] : [4, 8, 2]}
-        intensity={lightIntensity}
+        position={[4, 6, 2]}
+        intensity={road === 'city' ? 1.0 : 2.0}
         color={lightColor}
-        castShadow
       />
 
       {/* Car — camera is already positioned inside it */}
@@ -220,14 +219,13 @@ export default function RideScene({ road, positionSec }: { road: RoadId; positio
   return (
     <Canvas
       camera={{
-        position: [-0.3, 0.3, 0], // back seat: slightly behind center, at seat height, centred
+        position: [-0.3, 0.05, 0], // back seat: seat height, slightly behind centre
         fov: 75,
         near: 0.01,
         far: 300,
       }}
       onCreated={({ camera }) => {
-        // Look toward +X = front of car / windshield
-        camera.lookAt(10, 0.3, 0);
+        camera.lookAt(10, 0.0, 0); // look forward through windshield (+X)
       }}
       shadows
       style={{ position: 'absolute', inset: 0 }}
