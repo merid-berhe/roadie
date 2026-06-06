@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GestureKind } from '@roadie/shared';
 import SceneCanvas from '../scene/SceneCanvas';
 import { getPalette } from '../scene/palette';
+import type { RoadId } from '../scene/scenes';
 import { getActualPositionSec, nudgePlayback } from '../audio/player';
 import { isBeatSound, playFireworkAccent, playGestureSound } from '../audio/gestures';
 import { useRoom } from '../state/room';
@@ -29,6 +30,7 @@ export default function Riding() {
   const rideStartAt   = useRoom((s) => s.rideStartAt);
   const clockOffset   = useRoom((s) => s.clockOffset);
   const syncPositionSec = useRoom((s) => s.syncPositionSec);
+  const selectedRoad    = useRoom((s) => s.selectedRoad) as RoadId;
   const peerGestureKind = useRoom((s) => s.peerGestureKind);
   const peerGestureAt   = useRoom((s) => s.peerGestureAt);
   const fireworkSynced  = useRoom((s) => s.fireworkSynced);
@@ -118,7 +120,7 @@ export default function Riding() {
       style={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBottom})` }}
     >
       <SceneCanvas
-        palette={palette}
+        road={selectedRoad}
         positionSec={positionSec}
         driverGlyph={driver?.glyph ?? '▲'}
         driverColor={driver?.color ?? '#F5A623'}

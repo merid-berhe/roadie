@@ -1,56 +1,48 @@
-// PixiJS 2.5D parallax scene (§7). Three scrolling layers + cabin frame + occupant glyphs.
-// Scroll position is derived from the server-authoritative clock so both clients see
-// the same landscape at the same moment (§9).
-// M5: gesture floating symbols + firework particle burst (§8).
+// PixiJS scene — Florence-style flat vector. Four road themes, real cabin frame,
+// SVG-style occupant silhouettes with gesture animation.
 
 import { useEffect, useRef } from 'react';
-import {
-  Application,
-  Container,
-  Graphics,
-  Text,
-  TextStyle,
-} from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import type { GestureKind } from '@roadie/shared';
-import type { Palette } from './palette';
+import type { RoadId } from './scenes';
+import { buildScene } from './scenes';
+import { getCabinLayout, drawCabin, drawOccupant } from './cabin';
+import type { LayerPair } from './scenes/types';
 
 type Props = {
-  palette: Palette;
+  road: RoadId;
   positionSec: number;
   driverGlyph: string;
   driverColor: string;
   passengerGlyph: string;
   passengerColor: string;
-  // M5
   driverGestureKind?: GestureKind | null;
   passengerGestureKind?: GestureKind | null;
   firework?: { synced: boolean } | null;
 };
 
-const SPEEDS = { far: 40, mid: 80, near: 160 };
+type Particle = { g: Graphics; vx: number; vy: number; life: number };
 
 const GESTURE_SYMBOLS: Partial<Record<GestureKind, string>> = {
   wave: '👋', headlights: '✦', heart: '♥',
   tambourine: '♪', shaker: '≈', chime: '♫',
 };
 
-type Particle = { g: Graphics; vx: number; vy: number; life: number };
-
 export default function SceneCanvas({
-  palette, positionSec,
-  driverGlyph, driverColor, passengerGlyph, passengerColor,
+  road, positionSec,
+  driverColor, passengerColor,
   driverGestureKind, passengerGestureKind, firework,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const posRef = useRef(positionSec);
-  const driverGestureRef = useRef<GestureKind | null | undefined>(driverGestureKind);
-  const passengerGestureRef = useRef<GestureKind | null | undefined>(passengerGestureKind);
-  const fireworkRef = useRef<{ synced: boolean } | null | undefined>(firework);
+  const posRef   = useRef(positionSec);
+  const drGRef   = useRef(driverGestureKind);
+  const pgGRef   = useRef(passengerGestureKind);
+  const fwRef    = useRef(firework);
 
   useEffect(() => { posRef.current = positionSec; }, [positionSec]);
-  useEffect(() => { driverGestureRef.current = driverGestureKind; }, [driverGestureKind]);
-  useEffect(() => { passengerGestureRef.current = passengerGestureKind; }, [passengerGestureKind]);
-  useEffect(() => { fireworkRef.current = firework; }, [firework]);
+  useEffect(() => { drGRef.current = driverGestureKind; }, [driverGestureKind]);
+  useEffect(() => { pgGRef.current = passengerGestureKind; }, [passengerGestureKind]);
+  useEffect(() => { fwRef.current = firework; }, [firework]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -61,13 +53,14 @@ export default function SceneCanvas({
     (async () => {
       try {
         const rect = el.getBoundingClientRect();
-        const W0 = Math.round(rect.width)  || window.innerWidth;
-        const H0 = Math.round(rect.height) || window.innerHeight;
+        const W = Math.round(rect.width)  || window.innerWidth;
+        const H = Math.round(rect.height) || window.innerHeight;
+        const layout = getCabinLayout(W, H);
 
         app = new Application();
         await app.init({
-          width: W0, height: H0,
-          background: parseInt(palette.skyTop.slice(1), 16),
+          width: W, height: H,
+          background: 0x0d0f18,
           antialias: true,
           resolution: Math.min(window.devicePixelRatio, 2),
           autoDensity: true,
@@ -77,131 +70,119 @@ export default function SceneCanvas({
         const canvas = app.canvas as HTMLCanvasElement;
         canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
         el.appendChild(canvas);
+        console.log(`[scene] ${W}×${H} road=${road}`);
 
-        const W = app.screen.width;
-        const H = app.screen.height;
-        console.log(`[scene] ${W}×${H}`);
+        // ── Build scene layers ──────────────────────────────────────
+        const scene = buildScene(road, W, H);
 
-        const winY = Math.round(H * 0.08);
-        const winH = Math.round(H * 0.60);
-        const winX = Math.round(W * 0.04);
-        const winW = W - winX * 2;
-        const seatY = winY + winH - Math.round(winH * 0.22);
-
-        // Scenery layers masked to windshield
+        // Scenery container, masked to windshield
         const scenery = new Container();
         app.stage.addChild(scenery);
-        const winMask = new Graphics().rect(winX, winY, winW, winH).fill(0xffffff);
-        scenery.mask = winMask;
-        app.stage.addChild(winMask);
+        const mask = new Graphics()
+          .rect(layout.winX, layout.winY, layout.winW, layout.winH)
+          .fill(0xffffff);
+        scenery.mask = mask;
+        app.stage.addChild(mask);
 
-        const farPair  = makeLayers(W, winH, winY, palette.far,  200);
-        const midPair  = makeLayers(W, winH, winY, palette.mid,  120);
-        const nearPair = makeLayers(W, winH, winY, palette.near,  70);
-        scenery.addChild(...farPair, ...midPair, ...nearPair);
+        for (const layer of scene.layers) {
+          scenery.addChild(layer.pair[0], layer.pair[1]);
+        }
 
-        // Cabin frame
-        const frame = new Graphics();
-        frame.rect(0, 0, W, winY).fill({ color: 0x0b1020 });
-        frame.rect(0, winY, winX, winH).fill({ color: 0x0b1020 });
-        frame.rect(winX + winW, winY, W - winX - winW, winH).fill({ color: 0x0b1020 });
-        frame.rect(0, winY + winH, W, H - winY - winH).fill({ color: 0x0b1020 });
-        frame.rect(winX, winY, winW, 3).fill({ color: 0x1a2030 });
-        frame.rect(winX, winY + winH - 3, winW, 3).fill({ color: 0x1a2030 });
-        app.stage.addChild(frame);
+        // ── Cabin frame ──────────────────────────────────────────────
+        const cabin = drawCabin(W, H, layout);
+        app.stage.addChild(cabin);
 
-        // Occupant glyphs
-        addOccupant(app, W * 0.28, seatY, driverGlyph, driverColor);
-        addOccupant(app, W * 0.72, seatY, passengerGlyph, passengerColor);
+        // ── Occupants ────────────────────────────────────────────────
+        const occupantContainer = new Container();
+        app.stage.addChild(occupantContainer);
 
-        // Gesture display texts (M5)
-        const driverGestureText    = makeGestureText(driverColor);
-        const passengerGestureText = makeGestureText(passengerColor);
-        driverGestureText.x    = W * 0.28; driverGestureText.y    = seatY - 60;
-        passengerGestureText.x = W * 0.72; passengerGestureText.y = seatY - 60;
-        app.stage.addChild(driverGestureText, passengerGestureText);
+        const driverColor6   = parseInt(driverColor.replace('#', ''),   16);
+        const passengerColor6 = parseInt(passengerColor.replace('#', ''), 16);
 
-        // Firework particle container (M5)
+        // Occupants are re-drawn each frame via refs (gesture-driven)
+        // We keep one Graphics per occupant and redraw when gesture changes
+        let driverG   = drawOccupant(occupantContainer, layout.driverX,    layout.seatY, driverColor6,    drGRef.current);
+        let passengerG = drawOccupant(occupantContainer, layout.passengerX, layout.seatY, passengerColor6, pgGRef.current);
+
+        // Gesture floating text
+        const makeGestureText = (color: string) => {
+          const t = new Text({ text: '', style: new TextStyle({ fill: color, fontSize: 26, fontFamily: 'system-ui' }) });
+          t.anchor.set(0.5, 1); t.alpha = 0;
+          app!.stage.addChild(t);
+          return t;
+        };
+        const drText = makeGestureText(driverColor);
+        drText.x = layout.driverX; drText.y = layout.seatY - 70;
+        const pgText = makeGestureText(passengerColor);
+        pgText.x = layout.passengerX; pgText.y = layout.seatY - 70;
+
+        // Firework particles
         const particles: Particle[] = [];
         const fx = new Container();
         app.stage.addChild(fx);
 
-        // Ticker state
+        // ── Ticker ───────────────────────────────────────────────────
         let prevPos = posRef.current;
-        let prevDriverGesture: GestureKind | null | undefined = null;
-        let prevPassengerGesture: GestureKind | null | undefined = null;
-        let prevFirework: { synced: boolean } | null | undefined = null;
-        let driverGestureMs   = 0;
-        let passengerGestureMs = 0;
+        let prevDrG: typeof drGRef.current = null;
+        let prevPgG: typeof pgGRef.current = null;
+        let prevFw:  typeof fwRef.current  = null;
+        let drGestureMs = 0; let pgGestureMs = 0;
+        let prevDrGKind: string | null | undefined = null;
+        let prevPgGKind: string | null | undefined = null;
 
         app.ticker.add(({ deltaMS }) => {
           // Parallax scroll
-          const pos = posRef.current;
-          const delta = pos - prevPos;
-          prevPos = pos;
+          const pos   = posRef.current;
+          const delta = pos - prevPos; prevPos = pos;
           if (delta > 0) {
-            scrollLayer(farPair,  W, SPEEDS.far  * delta);
-            scrollLayer(midPair,  W, SPEEDS.mid  * delta);
-            scrollLayer(nearPair, W, SPEEDS.near * delta);
+            for (const layer of scene.layers) scrollLayer(layer.pair, W, layer.speed * delta);
           }
 
-          // Driver gesture display
-          const dg = driverGestureRef.current;
-          if (dg && dg !== prevDriverGesture) {
-            driverGestureText.text = GESTURE_SYMBOLS[dg] ?? dg;
-            driverGestureText.alpha = 1;
-            driverGestureMs = 1500;
-            prevDriverGesture = dg;
+          // Occupant redraw on gesture change
+          const dg = drGRef.current;
+          const pg = pgGRef.current;
+          if (dg !== prevDrG) {
+            occupantContainer.removeChild(driverG); driverG.destroy();
+            driverG = drawOccupant(occupantContainer, layout.driverX, layout.seatY, driverColor6, dg);
+            prevDrG = dg;
           }
-          if (!dg) prevDriverGesture = null;
-          if (driverGestureMs > 0) {
-            driverGestureMs -= deltaMS;
-            driverGestureText.alpha = Math.max(0, driverGestureMs / 800);
-          }
-
-          // Passenger gesture display
-          const pg = passengerGestureRef.current;
-          if (pg && pg !== prevPassengerGesture) {
-            passengerGestureText.text = GESTURE_SYMBOLS[pg] ?? pg;
-            passengerGestureText.alpha = 1;
-            passengerGestureMs = 1500;
-            prevPassengerGesture = pg;
-          }
-          if (!pg) prevPassengerGesture = null;
-          if (passengerGestureMs > 0) {
-            passengerGestureMs -= deltaMS;
-            passengerGestureText.alpha = Math.max(0, passengerGestureMs / 800);
+          if (pg !== prevPgG) {
+            occupantContainer.removeChild(passengerG); passengerG.destroy();
+            passengerG = drawOccupant(occupantContainer, layout.passengerX, layout.seatY, passengerColor6, pg);
+            prevPgG = pg;
           }
 
-          // Firework trigger (M5, §8c)
-          const fw = fireworkRef.current;
-          if (fw && fw !== prevFirework) {
-            prevFirework = fw;
-            const count  = fw.synced ? 60 : 20;
+          // Gesture text
+          if (dg && dg !== prevDrGKind) { drText.text = GESTURE_SYMBOLS[dg] ?? dg; drText.alpha = 1; drGestureMs = 1500; prevDrGKind = dg; }
+          if (!dg) prevDrGKind = null;
+          if (drGestureMs > 0) { drGestureMs -= deltaMS; drText.alpha = Math.max(0, drGestureMs / 800); }
+
+          if (pg && pg !== prevPgGKind) { pgText.text = GESTURE_SYMBOLS[pg] ?? pg; pgText.alpha = 1; pgGestureMs = 1500; prevPgGKind = pg; }
+          if (!pg) prevPgGKind = null;
+          if (pgGestureMs > 0) { pgGestureMs -= deltaMS; pgText.alpha = Math.max(0, pgGestureMs / 800); }
+
+          // Fireworks
+          const fw = fwRef.current;
+          if (fw && fw !== prevFw) {
+            prevFw = fw;
+            const count  = fw.synced ? 70 : 22;
             const colors = fw.synced
-              ? [0xF5A623, 0x1FB6C4, 0xffffff, 0xffdd66]
+              ? [0xF5A623, 0x1FB6C4, 0xffffff, 0xffdd66, 0xff88aa]
               : [0xffffff, 0xdddddd];
-            const cx = W / 2;
-            const cy = winY + winH * 0.4;
+            const cx = W / 2; const cy = layout.winY + layout.winH * 0.4;
             for (let i = 0; i < count; i++) {
-              const angle  = (Math.PI * 2 * i) / count + (Math.random() * 0.3);
-              const speed  = fw.synced ? 3 + Math.random() * 5 : 2 + Math.random() * 2.5;
-              const color  = colors[i % colors.length];
-              const radius = fw.synced ? 4 : 3;
-              const g = new Graphics().circle(0, 0, radius).fill(color);
+              const angle = (Math.PI * 2 * i) / count + (Math.abs(Math.sin(i * 3.7)) * 0.4);
+              const speed = fw.synced ? 3 + Math.abs(Math.sin(i * 7.1)) * 5 : 2 + Math.abs(Math.sin(i * 5)) * 2.5;
+              const g = new Graphics().circle(0, 0, fw.synced ? 4 : 3).fill(colors[i % colors.length]);
               g.x = cx; g.y = cy; g.alpha = 1;
               fx.addChild(g);
-              particles.push({ g, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2, life: 1 });
+              particles.push({ g, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 2.5, life: 1 });
             }
           }
-
-          // Animate particles
           for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
-            p.vx *= 0.97;
-            p.vy += 0.18; // gravity
-            p.g.x += p.vx;
-            p.g.y += p.vy;
+            p.vx *= 0.97; p.vy += 0.18;
+            p.g.x += p.vx; p.g.y += p.vy;
             p.life -= deltaMS / 1800;
             p.g.alpha = Math.max(0, p.life);
             if (p.life <= 0) { fx.removeChild(p.g); p.g.destroy(); particles.splice(i, 1); }
@@ -212,52 +193,14 @@ export default function SceneCanvas({
       }
     })();
 
-    return () => {
-      destroyed = true;
-      setTimeout(() => app?.destroy(true), 0);
-    };
+    return () => { destroyed = true; setTimeout(() => app?.destroy(true), 0); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette, driverGlyph, driverColor, passengerGlyph, passengerColor]);
+  }, [road, driverColor, passengerColor]);
 
   return <div ref={mountRef} className="absolute inset-0" />;
 }
 
-// --- helpers ---
-
-function makeLayers(W: number, H: number, y: number, color: number, peakH: number): Graphics[] {
-  const g1 = buildHorizon(W, H, color, peakH);
-  const g2 = buildHorizon(W, H, color, peakH);
-  g1.y = y; g2.y = y; g2.x = W;
-  return [g1, g2];
-}
-
-function buildHorizon(W: number, H: number, color: number, peakH: number): Graphics {
-  const g = new Graphics();
-  const pts: number[] = [0, H];
-  const steps = 12;
-  for (let i = 0; i <= steps; i++) {
-    const x = (W / steps) * i;
-    const seed = Math.sin(i * 1.618 + color * 0.001) * 0.5 + 0.5;
-    pts.push(x, H - (peakH * 0.5 + seed * peakH * 0.5));
-  }
-  pts.push(W, H);
-  g.poly(pts).fill({ color });
-  return g;
-}
-
-function addOccupant(app: Application, x: number, y: number, glyph: string, color: string) {
-  const t = new Text({ text: glyph, style: new TextStyle({ fill: color, fontSize: 36, fontFamily: 'system-ui' }) });
-  t.anchor.set(0.5, 1); t.x = x; t.y = y;
-  app.stage.addChild(t);
-}
-
-function makeGestureText(color: string): Text {
-  const t = new Text({ text: '', style: new TextStyle({ fill: color, fontSize: 28, fontFamily: 'system-ui' }) });
-  t.anchor.set(0.5, 1); t.alpha = 0;
-  return t;
-}
-
-function scrollLayer(pair: Graphics[], W: number, dx: number) {
+function scrollLayer(pair: LayerPair, W: number, dx: number) {
   for (const g of pair) g.x -= dx;
   if (pair[0].x < -W) pair[0].x = pair[1].x + W;
   if (pair[1].x < -W) pair[1].x = pair[0].x + W;

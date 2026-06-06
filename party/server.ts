@@ -59,6 +59,7 @@ export default class RideRoom implements Party.Server {
       case 'gesture': return this.handleGesture(msg, sender);
       case 'firework':return this.handleFirework(sender);
       case 'name':    return this.handleName(msg, sender);
+      case 'road':    return this.handleRoad(msg, sender);
     }
   }
 
@@ -241,6 +242,12 @@ export default class RideRoom implements Party.Server {
       if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; }
       this.broadcastState();
     }, 120_000);
+  }
+
+  private handleRoad(msg: Extract<ClientMsg, { t: 'road' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || p.role !== 'driver') return; // only driver picks the road
+    this.broadcastToPeer(sender.id, { t: 'peerRoad', roadId: msg.roadId });
   }
 
   private handleName(msg: Extract<ClientMsg, { t: 'name' }>, sender: Party.Connection): void {
