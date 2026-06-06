@@ -14,7 +14,7 @@ function RoadTerrain() {
   const { scene } = useGLTF('/assets/scene/road_terrain.glb');
   // Default scale is ~cm; scale 0.01 → metres (120m long, ~70m wide)
   // Center was at (512, 405, -4) → offset to place near car origin
-  return <primitive object={scene} scale={0.01} position={[-5.12, -4.05, 0.04]} />;
+  return <primitive object={scene} scale={0.01} position={[-5.12, -2.05, 0.04]} />;
 }
 
 // Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
