@@ -15,7 +15,8 @@ const WORLD_SPEED = 12; // units/sec
 // ── Car ────────────────────────────────────────────────────────────────────
 function CicadaCar() {
   const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
-  return <primitive object={scene} />;
+  // Model exported on its side — rotate 90° around X to sit upright
+  return <primitive object={scene} rotation={[Math.PI / 2, 0, 0]} />;
 }
 
 // ── World wrapper — moves along +Z so objects approach from −Z ─────────────

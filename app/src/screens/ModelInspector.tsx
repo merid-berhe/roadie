@@ -7,7 +7,8 @@ import * as THREE from 'three';
 
 function CarModel() {
   const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
-  return <primitive object={scene} />;
+  // Model is exported on its side — rotate to sit upright
+  return <primitive object={scene} rotation={[Math.PI / 2, 0, 0]} />;
 }
 
 // Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
