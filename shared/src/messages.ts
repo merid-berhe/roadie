@@ -18,6 +18,7 @@ export type Rider = {
 export type ClientMsg =
   | { t: 'join'; userId: string; glyph: string; color: string }
   | { t: 'seed'; word: string }
+  | { t: 'road'; roadId: string }  // driver picks scene before ride
   | { t: 'choice'; field: string; value: string }
   | { t: 'ready' }
   | { t: 'ping'; sentAt: number } // clock offset estimation (§9)
@@ -43,7 +44,8 @@ export type RoomMsg =
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
   | { t: 'generationFailed'; reason: string }
   | { t: 'pong'; sentAt: number; serverTime: number }
-  | { t: 'nameWord'; glyph: string; word: string }  // peer submitted a name word (arrival)
+  | { t: 'nameWord'; glyph: string; word: string }
+  | { t: 'peerRoad'; roadId: string }  // peer sees the driver's road choice
   // --- M3+ ---
   | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }

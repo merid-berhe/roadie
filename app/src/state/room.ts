@@ -31,6 +31,7 @@ type RoomState = {
   fireworkSynced: boolean | null;
   fireworkAt: number;
   peerNameWord: string | null;
+  selectedRoad: string;
   // Plumbing
   send: (msg: ClientMsg) => void;
   ingest: (msg: RoomMsg) => void;
@@ -64,7 +65,8 @@ const initial = {
   peerGestureAt: 0,
   fireworkSynced: null as boolean | null,
   fireworkAt: 0,
-  peerNameWord: null as string | null,  // peer's contribution to the song title (arrival)
+  peerNameWord: null as string | null,
+  selectedRoad: 'desert' as string,     // driver-picked road; default desert
   send: noop,
 };
 
@@ -106,6 +108,8 @@ export const useRoom = create<RoomState>((set) => ({
           return { fireworkSynced: msg.synced, fireworkAt: Date.now() };
         case 'nameWord':
           return { peerNameWord: msg.word };
+        case 'peerRoad':
+          return { selectedRoad: msg.roadId };
         default:
           return {};
       }

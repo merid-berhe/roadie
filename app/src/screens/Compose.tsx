@@ -6,6 +6,7 @@ import {
   type DriverChoices,
   type PassengerChoices,
 } from '@roadie/shared';
+import { ROADS, type RoadId } from '../scene/scenes';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
@@ -20,9 +21,10 @@ export default function Compose() {
   const peerChoices = useRoom((s) => s.peerChoices);
   const send = useRoom((s) => s.send);
 
-  const [ownSeed, setOwnSeed] = useState<string | null>(null);
+  const [ownSeed, setOwnSeed]     = useState<string | null>(null);
   const [ownChoices, setOwnChoices] = useState<AnyChoices>({});
-  const [isReady, setIsReady] = useState(false);
+  const [ownRoad, setOwnRoad]     = useState<RoadId>('desert');
+  const [isReady, setIsReady]     = useState(false);
 
   const peer = riders.find((r) => r.role !== you);
   const peerSeed = peerChoices['seed'] ?? null;
@@ -45,6 +47,11 @@ export default function Compose() {
   function pickSeed(word: string) {
     setOwnSeed(word);
     send({ t: 'seed', word });
+  }
+
+  function pickRoad(roadId: RoadId) {
+    setOwnRoad(roadId);
+    if (you === 'driver') send({ t: 'road', roadId });
   }
 
   function pickChoice(field: string, value: string) {
@@ -93,6 +100,29 @@ export default function Compose() {
           <p className="mt-2 text-xs text-white/30">waiting for co-rider's mood…</p>
         )}
       </Section>
+
+      {/* Road selection — driver only (§ backlog 1b) */}
+      {you === 'driver' && (
+        <Section title="PICK YOUR ROAD">
+          <div className="grid grid-cols-2 gap-2">
+            {ROADS.map((r) => (
+              <ChoiceButton
+                key={r.id}
+                label={`${r.emoji} ${r.label}`}
+                selected={ownRoad === r.id}
+                color={identity?.color}
+                onSelect={() => pickRoad(r.id)}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+      {you === 'passenger' && peerChoices['__road'] && (
+        <p className="mb-4 text-xs text-white/40">
+          co-rider picked the road: {ROADS.find(r => r.id === peerChoices['__road'])?.emoji}{' '}
+          {ROADS.find(r => r.id === peerChoices['__road'])?.label}
+        </p>
+      )}
 
       {/* Own role choices */}
       <Section title={roleLabel}>
