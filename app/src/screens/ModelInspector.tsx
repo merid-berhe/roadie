@@ -10,6 +10,11 @@ function CarModel({ rotation }: { rotation: [number, number, number] }) {
   return <primitive object={scene} rotation={rotation} />;
 }
 
+function RoadTerrain() {
+  const { scene } = useGLTF('/assets/scene/road_terrain.glb');
+  return <primitive object={scene} />;
+}
+
 // Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
 function AxisArrows() {
   return <primitive object={new THREE.AxesHelper(3)} />;
@@ -79,6 +84,7 @@ export default function ModelInspector() {
             <Html center><p className="text-white text-sm">loading model…</p></Html>
           }>
             <CarModel rotation={rot} />
+            <RoadTerrain />
           </Suspense>
 
           {/* Red sphere = where the back-seat camera would be */}
