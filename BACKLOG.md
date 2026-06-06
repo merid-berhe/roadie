@@ -8,8 +8,8 @@ Items in priority order within each section. Scope and approach are decided in c
 
 The current scene is procedurally generated placeholder art. Replace with a proper game-quality visual system.
 
-### 1a. Art direction — DECIDED: Option D (clean vector / SVG, Florence-style)
-Clean, modern, mobile-native. Flat shapes with strong silhouettes, bold colour fields, minimal texture. Pairs well with the co-presence theme and is easiest to animate. Reference: Florence.
+### 1a. Art direction — DECIDED: Three.js 3D (2026-06-06, supersedes Florence/SVG)
+Switched from PixiJS 2D to Three.js + R3F. Back-seat POV is a real 3D camera inside a GLB car interior. World objects approach the camera. Horizontal parallax is gone — replaced by real forward motion through a 3D scene. Florence-style flat aesthetic still applies to UI elements (Compose, Arrival, etc.) outside the 3D viewport.
 
 ### 1b. Multiple scene themes (roads) — DECIDED: build all 4, driver picks before ride
 - **Desert / Route 66** (primary) — long straight highway, heat haze, saguaro cacti, summer sunset. Bold oranges/reds. Built first.

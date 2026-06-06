@@ -1,7 +1,9 @@
-# Roadie — Build Spec v3.1 (MVP Validation Prototype)
+# Roadie — Build Spec v4.0 (Production)
+
+**Status: PRODUCTION BUILD** — MVP validation complete (M0–M6 shipped 2026-06-05). Core loop validated. Now building for quality, not speed.
 
 **Audience:** the engineer/agent (Claude Code) implementing this.
-**Document type:** opinionated, executable build specification. Stacks are chosen, not suggested. Where a choice is genuinely swappable, the primary pick is named first and a fallback is given.
+**Document type:** opinionated, executable build specification. Stacks are chosen, not suggested.
 **Platform:** mobile-first responsive web (must work in mobile Safari and Chrome; desktop is a bonus, not a target).
 
 ---
@@ -94,7 +96,7 @@ Monetization, subscriptions, payments, cosmetics shop, scene selection, multiple
 | Styling | **Tailwind CSS** | Fast iteration; keep it minimal, this is a prototype. |
 | Game state | **Zustand** | Tiny, no boilerplate; good for fast-changing local state. |
 | Audio | **Tone.js** (over Web Audio API) | Needs beat-synced scheduling (gesture sounds snap to tempo) + an ambient bed + transport clock. Tone.js is built exactly for this. Use a plain `<audio>`/`AudioBufferSourceNode` for the generated track, wired into Tone's context. |
-| Scenery + FX | **PixiJS** (WebGL 2D) | Smooth parallax scroll + nice particle fireworks for modest effort. **Fallback:** Canvas2D if Pixi feels heavy. **Not Three.js/3D** — overkill for a prototype. |
+| Scenery + FX | **Three.js + @react-three/fiber** (WebGL 3D) | Production decision (2026-06-06): PixiJS 2D parallax validated the loop but horizontal scroll reads as sideways motion. 3D is the right medium — proper back-seat POV, GLB car interior assets load natively, forward road perspective is real not faked, 4 scene themes rendered in actual 3D space. R3F gives React-native integration with clean component model. |
 | Realtime / rooms | **PartyKit** (Cloudflare Durable Objects) | Purpose-built for "one stateful server per room" with authoritative logic — ideal for clock, gesture relay, and the firework window. Cheap on Cloudflare. **Fallback:** a small Node + `ws` server on Fly.io/Railway, or raw Durable Objects. *(Verify PartyKit's current status at build time; if changed, use the fallback — the architecture is identical: one authoritative WS room server.)* |
 | Auth + DB + Storage | **Supabase** | One vendor covers Anonymous Auth, Postgres, and file Storage with a generous free tier. Minimizes ops. |
 | Music generation | **fal.ai → MiniMax Music** (instrumental) | API-available, fast, ~$0.035/track. Put it behind a `MusicGenerator` adapter interface so Suno/Lyria/self-hosted MusicGen can be swapped in later (this directly mitigates provider-dependency risk). *Note: Google Lyria 3 had no public API at last check; do not depend on it. Suno (2026-06-05 check): best quality + length but **no official public API** (third-party resellers only → vendor-fragility, §19); kept as the deferred quality upgrade behind the adapter, not used now.* |
@@ -158,9 +160,9 @@ function buildPrompt(seedDriver: string, seedPassenger: string, d: DriverChoices
 
 ## 7. Visual production & scene architecture
 
-**Engine (confirmed): PixiJS** (WebGL 2D). It handles parallax sprites, particles (fireworks/weather), and color-grade filters performantly on mobile. **Fallbacks:** Phaser (heavier, more game-framework structure) or plain Canvas2D (leanest). **Do NOT use Unity or Godot** — their WebGL exports are multi-megabyte, slow to load on mobile, and break the "tap a link → you're in the car" instant-web feel; they also pull you out of the React/TS stack.
+**Engine (production): Three.js + @react-three/fiber (R3F)** — replaced PixiJS 2D (2026-06-06). PixiJS was correct for MVP validation speed; 3D is correct for production quality. R3F integrates natively with React, GLB/glTF assets load directly, and the back-seat POV is a real 3D camera rather than a 2D illusion.
 
-**Visual model: 2.5D layered parallax with a fixed cabin frame.** The player is stationary in a car; the world scrolls past in layers at depth-proportional speeds. No 3D, no driven world. This is the entire visual system — a small amount of code over bought/generated layer assets.
+**Visual model: 3D back-seat POV.** Camera positioned in the rear of a car interior (loaded as GLB), looking forward through the windshield. The world moves toward the camera. Four scene themes (Desert/Route 66, Coast, Mountain Pass, Night City), each with procedural 3D geometry as placeholder and slots for real 3D assets. Do NOT use Unity or Godot — keep everything in the React/TS/Three.js stack for instant-web mobile loading.
 
 ### Camera & composition (back-seat POV)
 A **single shared third-person camera in the back seat**, looking forward. Both players see the same view: two front-seat occupants, the windshield ahead, and a side window on each side. (Note: this is third-person "a portrait of the two of us," not first-person — chosen deliberately to maximize the sense of *co-presence*, which is the thing the prototype is validating.)
@@ -491,4 +493,5 @@ If the togetherness signal is strong, layer back in (from the v2 brief, roughly 
 |---|---|---|---|
 | v3 | 2026-06-05 | Initial import of build spec | Canonical source of truth established |
 | v3.1 | 2026-06-05 | Ride 6–8 min → ~2 min; MiniMax via fal.ai confirmed. | See entry. |
-| v3.2 | 2026-06-06 | Art direction: **clean vector/SVG (Florence-style)**. 4 scenes: Desert/Route 66 (primary), Coast, Mountain pass, Night city. Driver picks scene in Compose. Cabin frame + occupant silhouettes in code (placeholder), real assets swap in without code changes. | Post-validation production build decisions. | Ride length 6–8 min → **~2 min**; generation target `durationSec` 420 → 120; confirmed **MiniMax via fal.ai** behind the `MusicGenerator` adapter; §16 swap-window numbers rescaled; Suno noted as deferred upgrade (no official API). | Shorter ride fits MiniMax in one official single call (no looping/borrowed-track gymnastics), keeps cost ~$0.035/ride & official-provider swappability (§19), and likely improves completion + togetherness signal (§13). Decided with user. |
+| v4.0 | 2026-06-06 | **Production build begins.** Spec version bumped from v3.x (MVP prototype) to v4.0. Scene engine: **PixiJS 2D → Three.js + R3F**. Back-seat POV is a real 3D camera; 4 scene themes in 3D; GLB car interior assets load natively. Audio validated and works; visual quality is now the priority. | MVP loop validated — togetherness feeling confirmed. Now building for real users. |
+| v3.2 | 2026-06-06 | Art direction: **clean vector/SVG (Florence-style)**. 4 scenes, driver picks. | Superseded by v4.0 Three.js decision same day. | Ride length 6–8 min → **~2 min**; generation target `durationSec` 420 → 120; confirmed **MiniMax via fal.ai** behind the `MusicGenerator` adapter; §16 swap-window numbers rescaled; Suno noted as deferred upgrade (no official API). | Shorter ride fits MiniMax in one official single call (no looping/borrowed-track gymnastics), keeps cost ~$0.035/ride & official-provider swappability (§19), and likely improves completion + togetherness signal (§13). Decided with user. |

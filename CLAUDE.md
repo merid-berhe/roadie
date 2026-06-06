@@ -105,6 +105,13 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ---
 
+#### 2026-06-06 — Production begins: Three.js migration decision
+- **Completed:** masterRule.md bumped to v4.0 (Production). Scene engine decision: PixiJS 2D → Three.js + @react-three/fiber. Back-seat POV becomes a real 3D camera inside a GLB car interior. 4 scene themes stay but built in 3D. MOCK_MUSIC flag added (skip fal.ai charges during visual testing: `npm run dev:party:mock`). Forward-perspective road with animated vanishing-point dashes added to current PixiJS scene (interim). All docs updated (masterRule, BACKLOG, session log).
+- **In flight:** Three.js migration (PixiJS removed, R3F scene component replacing SceneCanvas).
+- **Next:** Install three + @react-three/fiber + @react-three/drei. Build R3F scene: back-seat camera, procedural 3D road + scenery for each theme, GLB loader slot for car interior asset.
+
+---
+
 #### 2026-06-05 — M6: arrival + glovebox + §13 instrumentation ✅ MVP COMPLETE
 - **Completed:** `supabase/schema.sql` (§14 full schema — users/rides/songs/glovebox_entries/reports/events + RLS); `lib/analytics.ts` (best-effort `track()` → Supabase events); `Arrival.tsx` (each rider submits a word, song titled + saved with §5 recipe attribution); `PostRide.tsx` (§13 validation question "Definitely/Sort of/Not really", positive token rating, report path, events fired); `Glovebox.tsx` (list + play saved songs, `song_replayed` event); `RideScreen.tsx`: full §13 tuning-phase funnel (`tuning_started`, `tuning_Xs_reached`, `tuning_completed`) + `paired`, `ride_started`, `ride_completed` + arrival phase routing + post-ride flow (arrival → post-ride → glovebox). Party server: `arrival` phase after 120s, `nameWord` relay. typecheck clean / tests 2/2 / build green. Merged to `main`, pushed.
 - **In flight:** nothing.
