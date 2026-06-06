@@ -1,25 +1,29 @@
-// Temporary model inspector — lets us see the GLB and find the right camera position.
-// Route: ?inspect=1 in the URL. Remove this screen after camera position is decided.
-import { Suspense, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Grid, GizmoHelper, GizmoViewport, Html } from '@react-three/drei';
+import { Suspense, useState, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, useGLTF, GizmoHelper, GizmoViewport, Html } from '@react-three/drei';
 import * as THREE from 'three';
+
+// Live camera position tracker
+function CameraTracker({ onUpdate }: { onUpdate: (info: string) => void }) {
+  const { camera, scene: _ } = useThree();
+  const controls = useRef<{ target: THREE.Vector3 } | null>(null);
+  useFrame(() => {
+    const p = camera.position;
+    onUpdate(
+      `cam [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]`
+    );
+  });
+  return null;
+}
 
 function CarModel({ rotation }: { rotation: [number, number, number] }) {
   const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
   return <primitive object={scene} rotation={rotation} />;
 }
 
-function RoadTerrain() {
+function RoadTerrain({ y }: { y: number }) {
   const { scene } = useGLTF('/assets/scene/road_terrain.glb');
-  // Default scale is ~cm; scale 0.01 → metres (120m long, ~70m wide)
-  // Center was at (512, 405, -4) → offset to place near car origin
-  return <primitive object={scene} scale={0.01} position={[-5.12, -3.1, 0.04]} />;
-}
-
-// Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
-function AxisArrows() {
-  return <primitive object={new THREE.AxesHelper(3)} />;
+  return <primitive object={scene} scale={0.01} position={[-5.12, y, 0.04]} />;
 }
 
 function CameraMarker({ pos }: { pos: [number, number, number] }) {
@@ -31,17 +35,24 @@ function CameraMarker({ pos }: { pos: [number, number, number] }) {
   );
 }
 
+function AxisArrows() {
+  return <primitive object={new THREE.AxesHelper(3)} />;
+}
+
 export default function ModelInspector() {
+  const [rot,    setRot]    = useState<[number, number, number]>([0, 0, 0]);
   const [camPos, setCamPos] = useState<[number, number, number]>([0, 1.2, 0.8]);
-  const [rot, setRot] = useState<[number, number, number]>([0, 0, 0]);
+  const [terrainY, setTerrainY] = useState(-3.1);
+  const [liveInfo, setLiveInfo] = useState('');
 
   return (
     <div className="flex h-screen flex-col bg-[#0d0d1a]">
       {/* Controls */}
-      <div className="flex items-center gap-4 bg-black/60 px-4 py-2 text-xs text-white/70">
+      <div className="flex flex-wrap items-center gap-3 bg-black/60 px-4 py-2 text-xs text-white/70">
         <span className="font-semibold text-white">GLB Inspector</span>
-        <span>orbit: left drag · zoom: scroll · pan: right drag</span>
-        <span className="ml-4 text-white/50">model rotation (×π/2):</span>
+        <span className="text-white/30">orbit: drag · zoom: scroll</span>
+
+        <span className="ml-2 text-white/50">model rot (×π/2):</span>
         {(['x','y','z'] as const).map((axis, i) => (
           <label key={axis} className="flex items-center gap-1">
             {axis}
@@ -55,13 +66,18 @@ export default function ModelInspector() {
             />
           </label>
         ))}
-        <span className="ml-auto">camera marker (red sphere):</span>
+
+        <span className="ml-2 text-white/50">terrain Y:</span>
+        <input type="number" step="0.1" value={terrainY}
+          onChange={(e) => setTerrainY(parseFloat(e.target.value) || 0)}
+          className="w-20 rounded bg-white/10 px-1 py-0.5 text-white"
+        />
+
+        <span className="ml-2 text-white/50">cam marker:</span>
         {(['x','y','z'] as const).map((axis, i) => (
           <label key={axis} className="flex items-center gap-1">
             {axis}
-            <input
-              type="number" step="0.1"
-              value={camPos[i]}
+            <input type="number" step="0.1" value={camPos[i]}
               onChange={(e) => {
                 const n = [...camPos] as [number, number, number];
                 n[i] = parseFloat(e.target.value) || 0;
@@ -71,33 +87,28 @@ export default function ModelInspector() {
             />
           </label>
         ))}
+
+        {/* Live camera position */}
+        <span className="ml-auto font-mono text-amber-400">{liveInfo}</span>
       </div>
 
       {/* 3D viewport */}
       <div className="flex-1">
         <Canvas camera={{ position: [3, 2, 4], fov: 60 }} shadows>
           <ambientLight intensity={1.5} />
-          <directionalLight position={[5, 10, 5]} intensity={2} castShadow />
+          <directionalLight position={[5, 10, 5]} intensity={2} />
 
-          {/* Axis arrows: RED=+X  GREEN=+Y  BLUE=+Z */}
+          <CameraTracker onUpdate={setLiveInfo} />
+
           <AxisArrows />
 
-          <Suspense fallback={
-            <Html center><p className="text-white text-sm">loading model…</p></Html>
-          }>
+          <Suspense fallback={<Html center><p className="text-white text-sm">loading…</p></Html>}>
             <CarModel rotation={rot} />
-            <RoadTerrain />
+            <RoadTerrain y={terrainY} />
           </Suspense>
 
-          {/* Red sphere = where the back-seat camera would be */}
           <CameraMarker pos={camPos} />
 
-          <Grid
-            args={[20, 20]}
-            cellColor="#333"
-            sectionColor="#555"
-            fadeDistance={15}
-          />
           <OrbitControls makeDefault />
           <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
             <GizmoViewport />
@@ -105,12 +116,12 @@ export default function ModelInspector() {
         </Canvas>
       </div>
 
-      <div className="bg-black/60 px-4 py-2 text-xs text-white/50">
-        Move the X/Y/Z sliders to position the red sphere where the back-seat camera should sit.
-        Note the coordinates — that becomes the camera position in the ride scene.
+      <div className="bg-black/60 px-4 py-1 text-xs text-white/40">
+        Adjust <b className="text-white/60">terrain Y</b> until car wheels sit on road · <b className="text-white/60">cam marker</b> = back-seat camera position · <b className="text-amber-400">live cam</b> shows inspector camera coords
       </div>
     </div>
   );
 }
 
 useGLTF.preload('/assets/cars/cicada_retro_cartoon_car.glb');
+useGLTF.preload('/assets/scene/road_terrain.glb');
