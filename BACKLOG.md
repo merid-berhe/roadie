@@ -38,6 +38,16 @@ Before buying any scenery asset: (1) separated transparent layers, (2) horizonta
 
 Sources: CraftPix.net · itch.io (ansimuz) · Kenney.nl (CC0) · GameDev Market · OpenGameArt.
 
+### 1f. Camera system (three tiers, build in order)
+
+**Tier 1 — Free look (drag to look around):** Touch/mouse drag rotates the camera within a constrained cone (can't look completely backward). On mobile use device gyroscope as an option. Gives riders agency, makes the interior explorable. Relatively simple — constrain OrbitControls or use pointer events to offset camera rotation.
+
+**Tier 2 — Per-role camera positions:** Driver camera sits on the driver's side (slightly left, looking forward-right toward the road). Passenger camera sits on the passenger's side (slightly right). Both still look generally forward but from their own seat. This makes the POV feel personal rather than a shared floating camera.
+
+**Tier 3 — Turn-to-face (the co-presence moment):** Each rider can "turn their head" toward the other (a gesture button or hold). The camera smoothly rotates to face the passenger/driver seat. This is the highest-value feature — being able to look at your co-rider while riding is a direct expression of the togetherness question (§0). Requires the character silhouettes (§1d) to be in place first so there's something meaningful to look at.
+
+Camera position will need final tuning once character silhouettes are added (§1d) — they give the natural reference points for back-seat placement.
+
 ---
 
 ## 2. Lounge (Pre-Ride Landing Experience)
