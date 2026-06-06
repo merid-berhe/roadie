@@ -2,12 +2,23 @@
 // Car front faces −X. Camera at [0.05, 1.25, 0] = back seat, looking toward −X.
 
 import { Suspense, useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
+
+const TERRAIN_LEN = 120; // terrain X length at scale 0.01
 
 function DesertTerrain() {
   const { scene } = useGLTF('/assets/scene/road_terrain.glb');
-  return <primitive object={scene} scale={0.01} position={[-5.12, -3.1, 0.04]} />;
+  // Clone for second tile — shared geometry/materials, minimal overhead
+  const tile2 = useMemo(() => scene.clone(), [scene]);
+  return (
+    <>
+      {/* Tile 1: centred at X=0 */}
+      <primitive object={scene} scale={0.01} position={[-5.12, -3.1, 0.04]} />
+      {/* Tile 2: one terrain-length behind tile 1 */}
+      <primitive object={tile2}  scale={0.01} position={[-5.12 - TERRAIN_LEN, -3.1, 0.04]} />
+    </>
+  );
 }
 useGLTF.preload('/assets/scene/road_terrain.glb');
 import * as THREE from 'three';
@@ -22,12 +33,14 @@ function CicadaCar() {
 }
 
 // ── World wrapper — moves along −X so objects approach from +X (car front) ──
-function MovingWorld({ positionSec, children }: { positionSec: number; children: React.ReactNode }) {
-  const groupRef = useRef<THREE.Group>(null);
+function MovingWorld({ positionSec, groupRef, children }: {
+  positionSec: number;
+  groupRef: React.RefObject<THREE.Group | null>;
+  children: React.ReactNode;
+}) {
   useFrame(() => {
     if (!groupRef.current) return;
-    // Car front = -X, so objects come from negative X toward camera
-    groupRef.current.position.x = (positionSec * WORLD_SPEED) % 200;
+    groupRef.current.position.x = (positionSec * WORLD_SPEED) % TERRAIN_LEN;
   });
   return <group ref={groupRef}>{children}</group>;
 }
@@ -138,7 +151,30 @@ function CityScene() {
   );
 }
 
+// Keeps the camera riding on the terrain surface by raycasting downward each frame
+function TerrainFollower({ worldRef }: { worldRef: React.RefObject<THREE.Group | null> }) {
+  const { camera } = useThree();
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const down = useMemo(() => new THREE.Vector3(0, -1, 0), []);
+
+  useFrame(() => {
+    if (!worldRef.current) return;
+    // Cast from high above the camera's XZ position downward
+    raycaster.set(new THREE.Vector3(camera.position.x, 20, camera.position.z), down);
+    const hits = raycaster.intersectObject(worldRef.current, true);
+    if (hits.length > 0) {
+      const groundY = hits[0].point.y;
+      // Sit 1.25 units above the ground (back-seat eye height)
+      const targetY = groundY + 1.25;
+      // Smooth follow — lerp 10% per frame so bumps feel natural
+      camera.position.y += (targetY - camera.position.y) * 0.1;
+    }
+  });
+  return null;
+}
+
 function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number }) {
+  const worldRef = useRef<THREE.Group>(null);
   const bgColor = {
     desert:   '#1a1040',
     coast:    '#87ceeb',
@@ -164,8 +200,11 @@ function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number
         <CicadaCar />
       </Suspense>
 
+      {/* Terrain elevation follower — keeps camera riding on road surface */}
+      {road === 'desert' && <TerrainFollower worldRef={worldRef} />}
+
       {/* Scrolling world */}
-      <MovingWorld positionSec={positionSec}>
+      <MovingWorld positionSec={positionSec} groupRef={worldRef}>
         {road === 'desert'   && <DesertScene />}
         {road === 'coast'    && <CoastScene />}
         {road === 'mountain' && <MountainScene />}
