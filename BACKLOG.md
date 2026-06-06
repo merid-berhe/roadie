@@ -8,33 +8,30 @@ Items in priority order within each section. Scope and approach are decided in c
 
 The current scene is procedurally generated placeholder art. Replace with a proper game-quality visual system.
 
-### 1a. Art direction decision (discuss before building)
-- **Option A — Hand-drawn / illustrated style** (e.g. Alto's Odyssey, Monument Valley): flat but expressive, warm and timeless. Works well with the co-presence theme.
-- **Option B — Lo-fi / retro pixel art** (e.g. Minit, Shovel Knight): nostalgic, affordable to produce, pairs well with the AI music angle.
-- **Option C — Painterly / watercolour** (e.g. Gris, Hoa): emotional, premium feel. Highest art cost.
-- **Option D — Clean vector / SVG** (e.g. Florence): modern, mobile-native, easy to animate. Good compromise.
+### 1a. Art direction — DECIDED: Option D (clean vector / SVG, Florence-style)
+Clean, modern, mobile-native. Flat shapes with strong silhouettes, bold colour fields, minimal texture. Pairs well with the co-presence theme and is easiest to animate. Reference: Florence.
 
-### 1b. Multiple scene themes (roads)
-Currently hardcoded to `road: 'coast'`. Post-validation, unlock:
-- Coast (default) — ocean horizon, cliffs, warm light
-- Desert highway — long straight, heat haze, sunset palette
-- Mountain pass — switchbacks, pine trees, snow peaks
-- Night city — skyline glow, streetlights, rain reflections
+### 1b. Multiple scene themes (roads) — DECIDED: build all 4, driver picks before ride
+- **Desert / Route 66** (primary) — long straight highway, heat haze, saguaro cacti, summer sunset. Bold oranges/reds. Built first.
+- **Coast** — ocean horizon, cliffs, warm afternoon light
+- **Mountain pass** — switchbacks, pine silhouettes, snow peaks, cool blues
+- **Night city** — skyline glow, streetlights, rain reflections, deep purples
 
-Each scene: a set of parallax layer assets (far / mid / near) + a cabin frame variant + a mood-palette override. The TilingSprite system is already in place — drop in real assets.
+Scene selection added to the Compose flow: driver picks a road before "Let's drive." Both riders see the choice land (same peerChoice mechanism as other composition choices). Scene is procedurally generated (SVG/vector shapes) as placeholder — drop in real layered assets to upgrade per scene without code changes.
 
-### 1c. Cabin frame
-Current: programmatic dark rectangles. Replace with:
-- A real illustrated back-seat POV cabin frame (commissioned or AI-generated in a consistent style)
-- Two seat-back silhouettes as separate SVG/sprite layers
-- Optional: subtle idle animation (hanging charm, rear-view mirror)
-- Back-seat POV is rare in stock art — cheapest path is Fiverr commission or AI-generation in a locked style
+Each scene: far / mid / near TilingSprite layers + cabin frame variant + palette. System already in place.
 
-### 1d. Occupant silhouettes
-Current: Unicode glyph characters. Replace with:
-- Simple SVG head/shoulder silhouettes, tinted to glyph color
-- Gesture animations: a "wave" arm frame, head turn for reactions
-- No faces, no customisation — identity stays anonymous (§6)
+### 1c. Cabin frame — build AI-generated placeholder, replace with real art later
+Build a clean SVG/vector cabin frame in code (Florence-style flat shapes): roof bar, A-pillars, dashboard trim, side window frames. AI-generate a proper back-seat POV illustration in the agreed style as placeholder. Real commissioned art replaces it when ready — no code change needed, just asset swap.
+- Back-seat POV is rare in stock — source via Fiverr / itch.io artist boards / r/gameDevClassifieds
+- Style reference: Florence cabin interiors
+
+### 1d. Occupant silhouettes — BUILDING: SVG head/shoulder shapes with gesture animation
+Replace Unicode glyphs with proper SVG silhouettes:
+- Head + shoulder outline, tinted to rider's glyph color
+- Gesture animation frames: raised hand (wave), head turn (headlights/heart)
+- No faces, no customisation — anonymous identity (§6)
+- Built in code, no external assets needed
 
 ### 1e. Asset sourcing checklist (§7)
 Before buying any scenery asset: (1) separated transparent layers, (2) horizontally seamless/loopable, (3) works in portrait, (4) commercial license confirmed, (5) style consistent with cabin frame.
