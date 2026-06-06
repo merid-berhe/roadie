@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GestureKind } from '@roadie/shared';
-import SceneCanvas from '../scene/SceneCanvas';
+import RideScene from '../scene/RideScene';
 import { getPalette } from '../scene/palette';
 import type { RoadId } from '../scene/scenes';
 import { getActualPositionSec, nudgePlayback } from '../audio/player';
@@ -119,17 +119,7 @@ export default function Riding() {
       className="relative h-screen overflow-hidden"
       style={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBottom})` }}
     >
-      <SceneCanvas
-        road={selectedRoad}
-        positionSec={positionSec}
-        driverGlyph={driver?.glyph ?? '▲'}
-        driverColor={driver?.color ?? '#F5A623'}
-        passengerGlyph={passenger?.glyph ?? '●'}
-        passengerColor={passenger?.color ?? '#1FB6C4'}
-        driverGestureKind={driverGestureKind}
-        passengerGestureKind={passengerGestureKind}
-        firework={fireworkTrigger}
-      />
+      <RideScene road={selectedRoad} positionSec={positionSec} />
 
       {/* HUD */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-4 pt-2">
