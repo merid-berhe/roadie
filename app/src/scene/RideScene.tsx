@@ -18,41 +18,41 @@ function CicadaCar() {
   return <primitive object={scene} />;
 }
 
-// ── World wrapper — moves along +Z so objects approach from −Z ─────────────
+// ── World wrapper — moves along −X so objects approach from +X (car front) ──
 function MovingWorld({ positionSec, children }: { positionSec: number; children: React.ReactNode }) {
   const groupRef = useRef<THREE.Group>(null);
   useFrame(() => {
     if (!groupRef.current) return;
-    // Wrap every 200 units so the world loops
-    groupRef.current.position.z = (positionSec * WORLD_SPEED) % 200;
+    groupRef.current.position.x = -((positionSec * WORLD_SPEED) % 200);
   });
   return <group ref={groupRef}>{children}</group>;
 }
 
 // ── Scene themes ────────────────────────────────────────────────────────────
+// X = forward/back (car drives along +X), Y = up, Z = left/right
 function DesertScene() {
   const cacti = useMemo(() => Array.from({ length: 30 }, (_, i) => ({
-    x: (i % 2 === 0 ? 1 : -1) * (2.5 + Math.abs(Math.sin(i * 73.1)) * 4),
-    z: -i * 7 - 5,
+    z: (i % 2 === 0 ? 1 : -1) * (2.5 + Math.abs(Math.sin(i * 73.1)) * 4),
+    x: i * 7 + 5,
     s: 0.4 + Math.abs(Math.sin(i * 43.7)) * 0.5,
   })), []);
 
   return (
     <>
-      {/* Ground */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
-        <planeGeometry args={[40, 400]} />
+      {/* Ground — plane in XZ, normal pointing +Y */}
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.5, 0]}>
+        <planeGeometry args={[400, 40]} />
         <meshLambertMaterial color={0x9c6b3c} />
       </mesh>
-      {/* Road */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
-        <planeGeometry args={[1.6, 400]} />
+      {/* Road strip */}
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.49, 0]}>
+        <planeGeometry args={[400, 1.6]} />
         <meshLambertMaterial color={0x3a3330} />
       </mesh>
-      {/* Road dashes — 50 of them spread across the road length */}
+      {/* Road dashes */}
       {Array.from({ length: 50 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
-          <planeGeometry args={[0.1, 1.8]} />
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[i * 8, -0.48, 0]}>
+          <planeGeometry args={[1.8, 0.1]} />
           <meshBasicMaterial color={0xf4d03f} />
         </mesh>
       ))}
@@ -63,13 +63,8 @@ function DesertScene() {
             <cylinderGeometry args={[1, 1, 1, 7]} />
             <meshLambertMaterial color={0x3a6b3a} />
           </mesh>
-          <mesh position={[-c.s * 0.55, c.s * 0.7, 0]} rotation-z={Math.PI / 2.8}
+          <mesh position={[-c.s * 0.3, c.s * 0.7, 0]} rotation-z={Math.PI / 2.8}
             scale={[c.s * 0.1, c.s * 0.9, c.s * 0.1]}>
-            <cylinderGeometry args={[1, 1, 1, 6]} />
-            <meshLambertMaterial color={0x3a6b3a} />
-          </mesh>
-          <mesh position={[c.s * 0.55, c.s * 0.9, 0]} rotation-z={-Math.PI / 2.5}
-            scale={[c.s * 0.1, c.s * 0.7, c.s * 0.1]}>
             <cylinderGeometry args={[1, 1, 1, 6]} />
             <meshLambertMaterial color={0x3a6b3a} />
           </mesh>
@@ -77,7 +72,7 @@ function DesertScene() {
       ))}
       {/* Distant mesas */}
       {Array.from({ length: 8 }, (_, i) => (
-        <mesh key={i} position={[(i % 2 === 0 ? 1 : -1) * (6 + i), -0.1, -20 - i * 15]}>
+        <mesh key={i} position={[20 + i * 15, -0.1, (i % 2 === 0 ? 1 : -1) * (6 + i)]}>
           <cylinderGeometry args={[1.5, 2.2, 1.8, 5]} />
           <meshLambertMaterial color={0xc17f59} />
         </mesh>
@@ -89,32 +84,24 @@ function DesertScene() {
 function CoastScene() {
   return (
     <>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
-        <planeGeometry args={[40, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.5, 0]}>
+        <planeGeometry args={[400, 40]} />
         <meshLambertMaterial color={0x4a7c59} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
-        <planeGeometry args={[1.6, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.49, 0]}>
+        <planeGeometry args={[400, 1.6]} />
         <meshLambertMaterial color={0x3a3a3a} />
       </mesh>
       {Array.from({ length: 50 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
-          <planeGeometry args={[0.1, 1.8]} />
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[i * 8, -0.48, 0]}>
+          <planeGeometry args={[1.8, 0.1]} />
           <meshBasicMaterial color={0xffffff} />
         </mesh>
       ))}
-      {/* Ocean */}
-      <mesh rotation-x={-Math.PI / 2} position={[10, -0.48, -100]}>
-        <planeGeometry args={[18, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.48, 8]}>
+        <planeGeometry args={[400, 18]} />
         <meshLambertMaterial color={0x1a6e8a} />
       </mesh>
-      {/* Cliff edge */}
-      {Array.from({ length: 12 }, (_, i) => (
-        <mesh key={i} position={[6 + i * 0.3, -0.1, -i * 16]}>
-          <boxGeometry args={[2, 1.2, 4]} />
-          <meshLambertMaterial color={0x8b7355} />
-        </mesh>
-      ))}
     </>
   );
 }
@@ -122,39 +109,34 @@ function CoastScene() {
 function MountainScene() {
   return (
     <>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
-        <planeGeometry args={[40, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.5, 0]}>
+        <planeGeometry args={[400, 40]} />
         <meshLambertMaterial color={0x3a5040} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
-        <planeGeometry args={[1.6, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.49, 0]}>
+        <planeGeometry args={[400, 1.6]} />
         <meshLambertMaterial color={0x2a2a2a} />
       </mesh>
       {Array.from({ length: 50 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
-          <planeGeometry args={[0.1, 1.8]} />
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[i * 8, -0.48, 0]}>
+          <planeGeometry args={[1.8, 0.1]} />
           <meshBasicMaterial color={0xffffff} />
         </mesh>
       ))}
       {Array.from({ length: 20 }, (_, i) => {
-        const side = i % 2 === 0 ? 2.5 : -2.5;
+        const side = (i % 2 === 0 ? 1 : -1) * 2.5;
         const h = 1.2 + Math.abs(Math.sin(i * 37)) * 1.2;
         return (
-          <group key={i} position={[side, -0.5, -i * 9]}>
+          <group key={i} position={[i * 9, -0.5, side]}>
             <mesh position={[0, h * 0.55, 0]} scale={[0.35, h, 0.35]}>
-              <coneGeometry args={[1, 1, 7]} />
-              <meshLambertMaterial color={0x1a3a2a} />
-            </mesh>
-            <mesh position={[0, h * 0.22, 0]} scale={[0.55, h * 0.55, 0.55]}>
               <coneGeometry args={[1, 1, 7]} />
               <meshLambertMaterial color={0x1a3a2a} />
             </mesh>
           </group>
         );
       })}
-      {/* Mountain peaks far background */}
       {Array.from({ length: 5 }, (_, i) => (
-        <mesh key={i} position={[(i - 2) * 5, 1.5, -40 - i * 8]}>
+        <mesh key={i} position={[40 + i * 8, 1.5, (i - 2) * 5]}>
           <coneGeometry args={[3, 5 + i, 5]} />
           <meshLambertMaterial color={0x6b7c8a} />
         </mesh>
@@ -166,40 +148,29 @@ function MountainScene() {
 function CityScene() {
   return (
     <>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
-        <planeGeometry args={[40, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.5, 0]}>
+        <planeGeometry args={[400, 40]} />
         <meshLambertMaterial color={0x1a1a1a} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
-        <planeGeometry args={[1.6, 400]} />
+      <mesh rotation-x={-Math.PI / 2} position={[100, -0.49, 0]}>
+        <planeGeometry args={[400, 1.6]} />
         <meshLambertMaterial color={0x111111} />
       </mesh>
       {Array.from({ length: 50 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
-          <planeGeometry args={[0.1, 1.8]} />
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[i * 8, -0.48, 0]}>
+          <planeGeometry args={[1.8, 0.1]} />
           <meshBasicMaterial color={0x444466} />
         </mesh>
       ))}
       {Array.from({ length: 16 }, (_, i) => {
-        const side = i % 2 === 0 ? 4 + (i % 4) * 0.8 : -4 - (i % 4) * 0.8;
+        const side = (i % 2 === 0 ? 1 : -1) * (4 + (i % 4) * 0.8);
         const h = 2 + Math.abs(Math.sin(i * 73)) * 5;
         return (
-          <group key={i} position={[side, -0.5 + h / 2, -i * 10]}>
+          <group key={i} position={[i * 10, -0.5 + h / 2, side]}>
             <mesh>
-              <boxGeometry args={[1.5, h, 2]} />
+              <boxGeometry args={[2, h, 1.5]} />
               <meshLambertMaterial color={0x1a1a2e} />
             </mesh>
-            {/* Lit windows */}
-            {Array.from({ length: Math.floor(h * 1.5) }, (_, w) => (
-              <mesh key={w} position={[
-                Math.abs(Math.sin(w * 17.3)) > 0.5 ? 0.76 : -0.76,
-                -h / 2 + w * 0.6 + 0.3,
-                0,
-              ]}>
-                <planeGeometry args={[0.2, 0.25]} />
-                <meshBasicMaterial color={Math.sin(w * 31.7) > 0 ? 0xffcc66 : 0x66aaff} />
-              </mesh>
-            ))}
           </group>
         );
       })}
@@ -249,14 +220,14 @@ export default function RideScene({ road, positionSec }: { road: RoadId; positio
   return (
     <Canvas
       camera={{
-        position: [0, 0.8, 1.5],  // back seat: centred, seat height, behind front seats
+        position: [-0.3, 0.3, 0], // back seat: slightly behind center, at seat height, centred
         fov: 75,
         near: 0.01,
         far: 300,
       }}
       onCreated={({ camera }) => {
-        // Look toward front of car (−Z direction, glTF standard)
-        camera.lookAt(0, 0.8, -10);
+        // Look toward +X = front of car / windshield
+        camera.lookAt(10, 0.3, 0);
       }}
       shadows
       style={{ position: 'absolute', inset: 0 }}
