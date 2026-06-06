@@ -5,10 +5,9 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Grid, GizmoHelper, GizmoViewport, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
-function CarModel() {
+function CarModel({ rotation }: { rotation: [number, number, number] }) {
   const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
-  // Model is exported on its side — rotate to sit upright
-  return <primitive object={scene} rotation={[Math.PI / 2, 0, 0]} />;
+  return <primitive object={scene} rotation={rotation} />;
 }
 
 // Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
@@ -27,6 +26,7 @@ function CameraMarker({ pos }: { pos: [number, number, number] }) {
 
 export default function ModelInspector() {
   const [camPos, setCamPos] = useState<[number, number, number]>([0, 1.2, 0.8]);
+  const [rot, setRot] = useState<[number, number, number]>([Math.PI / 2, 0, 0]);
 
   return (
     <div className="flex h-screen flex-col bg-[#0d0d1a]">
@@ -34,6 +34,20 @@ export default function ModelInspector() {
       <div className="flex items-center gap-4 bg-black/60 px-4 py-2 text-xs text-white/70">
         <span className="font-semibold text-white">GLB Inspector</span>
         <span>orbit: left drag · zoom: scroll · pan: right drag</span>
+        <span className="ml-4 text-white/50">model rotation (×π/2):</span>
+        {(['x','y','z'] as const).map((axis, i) => (
+          <label key={axis} className="flex items-center gap-1">
+            {axis}
+            <input type="number" step="1" value={Math.round(rot[i] / (Math.PI/2))}
+              onChange={(e) => {
+                const n = [...rot] as [number, number, number];
+                n[i] = (parseFloat(e.target.value) || 0) * Math.PI / 2;
+                setRot(n);
+              }}
+              className="w-12 rounded bg-white/10 px-1 py-0.5 text-white"
+            />
+          </label>
+        ))}
         <span className="ml-auto">camera marker (red sphere):</span>
         {(['x','y','z'] as const).map((axis, i) => (
           <label key={axis} className="flex items-center gap-1">
@@ -64,7 +78,7 @@ export default function ModelInspector() {
           <Suspense fallback={
             <Html center><p className="text-white text-sm">loading model…</p></Html>
           }>
-            <CarModel />
+            <CarModel rotation={rot} />
           </Suspense>
 
           {/* Red sphere = where the back-seat camera would be */}
