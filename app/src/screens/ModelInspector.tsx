@@ -12,11 +12,9 @@ function CarModel({ rotation }: { rotation: [number, number, number] }) {
 
 function RoadTerrain() {
   const { scene } = useGLTF('/assets/scene/road_terrain.glb');
-  const box = new THREE.Box3().setFromObject(scene);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  console.log('[terrain] loaded — size:', size, 'center:', center);
-  return <primitive object={scene} />;
+  // Default scale is ~cm; scale 0.01 → metres (120m long, ~70m wide)
+  // Center was at (512, 405, -4) → offset to place near car origin
+  return <primitive object={scene} scale={0.01} position={[-5.12, -4.05, 0.04]} />;
 }
 
 // Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
