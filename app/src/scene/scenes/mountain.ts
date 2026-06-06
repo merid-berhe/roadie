@@ -67,6 +67,8 @@ export function buildMountain(W: number, H: number): BuiltScene {
       { pair: nearPair, speed: 140 },
     ],
     groundY,
+    roadColor: 0x2a2a2a,
+    dashColor: 0xffffff,
   };
 }
 

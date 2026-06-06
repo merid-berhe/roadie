@@ -83,12 +83,14 @@ export function buildDesert(W: number, H: number): BuiltScene {
 
   return {
     layers: [
-      { pair: skyPair,  speed: 0  },  // sky static
+      { pair: skyPair,  speed: 0  },
       { pair: farPair,  speed: 30 },
       { pair: midPair,  speed: 70 },
       { pair: nearPair, speed: 150 },
     ],
     groundY,
+    roadColor: 0x3a3330,
+    dashColor: 0xf4d03f,
   };
 }
 

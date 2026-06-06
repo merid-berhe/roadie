@@ -85,6 +85,8 @@ export function buildCity(W: number, H: number): BuiltScene {
       { pair: nearPair, speed: 135 },
     ],
     groundY,
+    roadColor: 0x1a1a1a,
+    dashColor: 0x555577,
   };
 }
 

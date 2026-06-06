@@ -9,6 +9,8 @@ export type SceneLayer = {
 };
 
 export type BuiltScene = {
-  layers: SceneLayer[];      // back-to-front order
-  groundY: number;           // y where the ground meets the road (for occupant placement)
+  layers: SceneLayer[];
+  groundY: number;
+  roadColor: number;
+  dashColor: number;
 };

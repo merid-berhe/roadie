@@ -64,5 +64,7 @@ export function buildCoast(W: number, H: number): BuiltScene {
       { pair: nearPair, speed: 145 },
     ],
     groundY,
+    roadColor: 0x3a3a3a,
+    dashColor: 0xffffff,
   };
 }

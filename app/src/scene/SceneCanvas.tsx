@@ -88,6 +88,26 @@ export default function SceneCanvas({
           scenery.addChild(layer.pair[0], layer.pair[1]);
         }
 
+        // ── Forward-perspective road (the critical "moving forward" cue) ──
+        // VP near the horizon, road surface expanding toward viewer.
+        const roadVPY    = layout.winY + layout.winH * 0.28; // vanishing point
+        const roadBotY   = layout.winY + layout.winH;
+        const roadBotW   = layout.winW * 0.44;              // width at viewer
+        const roadSurface = new Graphics().poly([
+          layout.winX + layout.winW / 2, roadVPY,
+          layout.winX + layout.winW / 2 - roadBotW / 2, roadBotY,
+          layout.winX + layout.winW / 2 + roadBotW / 2, roadBotY,
+        ]).fill({ color: scene.roadColor });
+        scenery.addChild(roadSurface);
+
+        // Animated centre-line dashes — 1×1 Graphics scaled each frame
+        const NUM_DASHES = 9;
+        const dashSprites = Array.from({ length: NUM_DASHES }, () => {
+          const d = new Graphics().rect(0, 0, 1, 1).fill({ color: scene.dashColor });
+          scenery.addChild(d);
+          return d;
+        });
+
         // ── Cabin frame ──────────────────────────────────────────────
         const cabin = drawCabin(W, H, layout);
         app.stage.addChild(cabin);
@@ -136,6 +156,21 @@ export default function SceneCanvas({
           const delta = pos - prevPos; prevPos = pos;
           if (delta > 0) {
             for (const layer of scene.layers) scrollLayer(layer.pair, W, layer.speed * delta);
+          }
+
+          // Forward-perspective road dash animation
+          const vx        = layout.winX + layout.winW / 2;
+          const dashPhase = (pos * 1.8) % 1; // controls forward speed feel
+          for (let i = 0; i < NUM_DASHES; i++) {
+            const t    = ((i / NUM_DASHES + dashPhase) % 1);        // 0=VP, 1=viewer
+            const tPow = Math.pow(t, 0.55);                          // perspective curve
+            const y    = roadVPY + (roadBotY - roadVPY) * tPow;
+            const dw   = Math.max(1, roadBotW * tPow * 0.055);      // dash width
+            const dh   = Math.max(1, (roadBotY - roadVPY) * tPow * 0.055); // dash height
+            dashSprites[i].x = vx - dw / 2;
+            dashSprites[i].y = y;
+            dashSprites[i].scale.set(dw, dh);
+            dashSprites[i].alpha = t < 0.06 ? 0 : Math.min(1, t * 2);
           }
 
           // Occupant redraw on gesture change
