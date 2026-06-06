@@ -2,6 +2,7 @@
 # .dev.vars is gitignored; never commit real keys.
 #
 # Get your fal.ai key at https://fal.ai/dashboard/keys
-# Without this key, the room server uses MockMusicGenerator (returns a mock URL
-# immediately; the browser won't play audio but the full message flow is exercised).
+# Set MOCK_MUSIC=true to skip real generation entirely (no fal.ai charges).
+# The room still transitions through all phases — music just won't play.
 FAL_KEY=
+MOCK_MUSIC=false

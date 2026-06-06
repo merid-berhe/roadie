@@ -42,9 +42,11 @@ export default class RideRoom implements Party.Server {
   private fireworkTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(readonly room: Party.Room) {
-    const falKey = room.env['FAL_KEY'] as string | undefined;
-    this.generator = falKey ? new FalMiniMaxGenerator(falKey) : new MockMusicGenerator();
-    if (!falKey) console.log('[room] no FAL_KEY — using MockMusicGenerator');
+    const falKey   = room.env['FAL_KEY']     as string | undefined;
+    const mockMode = room.env['MOCK_MUSIC']  as string | undefined;
+    const useMock  = mockMode === 'true' || !falKey;
+    this.generator = useMock ? new MockMusicGenerator() : new FalMiniMaxGenerator(falKey!);
+    console.log(`[room] generator=${useMock ? 'mock (no charges)' : 'fal.ai MiniMax'}`);
   }
 
   onMessage(raw: string, sender: Party.Connection): void {

@@ -13,7 +13,8 @@
   },
   "scripts": {
     "dev": "npm run dev -w @roadie/app",
-    "dev:party": "cd party && npx partykit dev --var FAL_KEY=$FAL_KEY",
+    "dev:party": "cd party && npx partykit dev --var FAL_KEY=$FAL_KEY --var MOCK_MUSIC=$MOCK_MUSIC",
+    "dev:party:mock": "cd party && MOCK_MUSIC=true npx partykit dev --var MOCK_MUSIC=true",
     "build": "npm run build -w @roadie/app",
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
