@@ -26,7 +26,7 @@ function CameraMarker({ pos }: { pos: [number, number, number] }) {
 
 export default function ModelInspector() {
   const [camPos, setCamPos] = useState<[number, number, number]>([0, 1.2, 0.8]);
-  const [rot, setRot] = useState<[number, number, number]>([Math.PI / 2, 0, 0]);
+  const [rot, setRot] = useState<[number, number, number]>([0, 0, 0]);
 
   return (
     <div className="flex h-screen flex-col bg-[#0d0d1a]">
