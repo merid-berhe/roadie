@@ -12,6 +12,10 @@ function CarModel({ rotation }: { rotation: [number, number, number] }) {
 
 function RoadTerrain() {
   const { scene } = useGLTF('/assets/scene/road_terrain.glb');
+  const box = new THREE.Box3().setFromObject(scene);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  console.log('[terrain] loaded — size:', size, 'center:', center);
   return <primitive object={scene} />;
 }
 
