@@ -3,10 +3,16 @@
 import { Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Grid, GizmoHelper, GizmoViewport, Html } from '@react-three/drei';
+import * as THREE from 'three';
 
 function CarModel() {
   const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
   return <primitive object={scene} />;
+}
+
+// Coloured axis arrows: Red=+X  Green=+Y  Blue=+Z
+function AxisArrows() {
+  return <primitive object={new THREE.AxesHelper(3)} />;
 }
 
 function CameraMarker({ pos }: { pos: [number, number, number] }) {
@@ -50,6 +56,9 @@ export default function ModelInspector() {
         <Canvas camera={{ position: [3, 2, 4], fov: 60 }} shadows>
           <ambientLight intensity={1.5} />
           <directionalLight position={[5, 10, 5]} intensity={2} castShadow />
+
+          {/* Axis arrows: RED=+X  GREEN=+Y  BLUE=+Z */}
+          <AxisArrows />
 
           <Suspense fallback={
             <Html center><p className="text-white text-sm">loading model…</p></Html>
