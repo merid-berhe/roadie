@@ -24,7 +24,7 @@ useGLTF.preload('/assets/scene/road_terrain.glb');
 import * as THREE from 'three';
 import type { RoadId } from './scenes';
 
-const WORLD_SPEED = 12; // units/sec
+const WORLD_SPEED = 4; // units/sec — cruising pace
 
 // ── Car ────────────────────────────────────────────────────────────────────
 function CicadaCar() {
@@ -151,23 +151,24 @@ function CityScene() {
   );
 }
 
-// Keeps the camera riding on the terrain surface by raycasting downward each frame
+// Adjusts the WORLD Y (not camera) so the terrain surface stays under the car.
+// Camera stays locked inside the car; hills feel like the car riding the road.
+const WHEEL_LEVEL = -0.65; // world Y where the road surface should meet the car
+
 function TerrainFollower({ worldRef }: { worldRef: React.RefObject<THREE.Group | null> }) {
-  const { camera } = useThree();
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
-  const down = useMemo(() => new THREE.Vector3(0, -1, 0), []);
+  const origin    = useMemo(() => new THREE.Vector3(0, 50, 0), []);
+  const down      = useMemo(() => new THREE.Vector3(0, -1, 0), []);
 
   useFrame(() => {
     if (!worldRef.current) return;
-    // Cast from high above the camera's XZ position downward
-    raycaster.set(new THREE.Vector3(camera.position.x, 20, camera.position.z), down);
+    raycaster.set(origin, down);
     const hits = raycaster.intersectObject(worldRef.current, true);
     if (hits.length > 0) {
-      const groundY = hits[0].point.y;
-      // Sit 1.25 units above the ground (back-seat eye height)
-      const targetY = groundY + 1.25;
-      // Smooth follow — lerp 10% per frame so bumps feel natural
-      camera.position.y += (targetY - camera.position.y) * 0.1;
+      const surfaceY = hits[0].point.y;
+      // Shift the world group Y so the surface lands at WHEEL_LEVEL
+      const delta = WHEEL_LEVEL - surfaceY;
+      worldRef.current.position.y += delta * 0.08; // gentle lerp — no jarring jumps
     }
   });
   return null;
