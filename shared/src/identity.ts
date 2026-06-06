@@ -14,9 +14,9 @@ export const IDENTITY_PALETTE: readonly GlyphIdentity[] = [
   { glyph: '▲', color: '#F5A623', colorName: 'amber' },
   { glyph: '●', color: '#1FB6C4', colorName: 'teal' },
   { glyph: '◆', color: '#E0566B', colorName: 'rose' },
-  { glyph: '■', color: '#7C6FF0', colorName: 'violet' },
+  { glyph: '◈', color: '#7C6FF0', colorName: 'violet' },
   { glyph: '★', color: '#3FB36B', colorName: 'meadow' },
-  { glyph: '⬣', color: '#E8893B', colorName: 'ember' },
+  { glyph: '✦', color: '#E8893B', colorName: 'ember' },
 ] as const;
 
 /**

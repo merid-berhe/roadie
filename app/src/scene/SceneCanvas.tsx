@@ -67,7 +67,7 @@ export default function SceneCanvas({
         app = new Application();
         await app.init({
           width: W0, height: H0,
-          background: 'transparent',
+          background: parseInt(palette.skyTop.slice(1), 16),
           antialias: true,
           resolution: Math.min(window.devicePixelRatio, 2),
           autoDensity: true,
