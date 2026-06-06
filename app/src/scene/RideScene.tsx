@@ -7,7 +7,7 @@ import { useGLTF } from '@react-three/drei';
 
 function DesertTerrain() {
   const { scene } = useGLTF('/assets/scene/road_terrain.glb');
-  return <primitive object={scene} scale={0.01} position={[-5.12, -2.05, 0.04]} />;
+  return <primitive object={scene} scale={0.01} position={[-5.12, -3.1, 0.04]} />;
 }
 useGLTF.preload('/assets/scene/road_terrain.glb');
 import * as THREE from 'three';
