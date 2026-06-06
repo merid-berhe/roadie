@@ -22,16 +22,16 @@ export interface MusicGenerator {
 // §16: generation abandon = 60s.
 // ---------------------------------------------------------------------------
 export class FalMiniMaxGenerator implements MusicGenerator {
-  private readonly base = 'https://queue.fal.run/fal-ai/minimax-music/v2.5';
+  // Synchronous endpoint — single blocking fetch, no polling needed.
+  // More reliable inside workerd than the queue+poll approach.
+  private readonly base = 'https://fal.run/fal-ai/minimax-music/v2.5';
 
   constructor(private readonly key: string) {}
 
   async generate(input: MusicGeneratorInput): Promise<MusicGeneratorOutput> {
     const startTime = Date.now();
-    const elapsed = () => Date.now() - startTime;
 
-    // 1. Submit to queue
-    const submitRes = await fetch(this.base, {
+    const res = await fetch(this.base, {
       method: 'POST',
       headers: { Authorization: `Key ${this.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -40,32 +40,14 @@ export class FalMiniMaxGenerator implements MusicGenerator {
         audio_setting: { format: 'mp3', sample_rate: 44100, bitrate: 128000 },
       }),
     });
-    if (!submitRes.ok) throw new Error(`fal submit ${submitRes.status}: ${await submitRes.text()}`);
-    const { request_id } = (await submitRes.json()) as { request_id: string };
 
-    // 2. Poll until COMPLETED, FAILED, or 60s timeout (§16)
-    while (elapsed() < 60_000) {
-      await sleep(3_000);
-      const statusRes = await fetch(`${this.base}/requests/${request_id}/status`, {
-        headers: { Authorization: `Key ${this.key}` },
-      });
-      if (!statusRes.ok) continue;
-      const { status } = (await statusRes.json()) as { status: string };
-      if (status === 'FAILED') throw new Error('fal: generation FAILED');
-      if (status !== 'COMPLETED') continue;
+    if (!res.ok) throw new Error(`fal ${res.status}: ${await res.text()}`);
 
-      // 3. Fetch result
-      const resultRes = await fetch(`${this.base}/requests/${request_id}`, {
-        headers: { Authorization: `Key ${this.key}` },
-      });
-      if (!resultRes.ok) throw new Error(`fal result ${resultRes.status}`);
-      const result = (await resultRes.json()) as { audio?: { url?: string }; url?: string };
-      const audioUrl = result.audio?.url ?? (result as { url?: string }).url;
-      if (!audioUrl) throw new Error('fal: no audio url in result');
-      return { audioUrl, latencyMs: elapsed() };
-    }
+    const result = (await res.json()) as { audio?: { url?: string }; url?: string };
+    const audioUrl = result.audio?.url ?? (result as { url?: string }).url;
+    if (!audioUrl) throw new Error('fal: no audio url in result');
 
-    throw new Error('fal: generation timeout (60s)');
+    return { audioUrl, latencyMs: Date.now() - startTime };
   }
 }
 
