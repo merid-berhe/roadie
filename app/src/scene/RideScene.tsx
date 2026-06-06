@@ -216,13 +216,13 @@ export default function RideScene({ road, positionSec }: { road: RoadId; positio
   return (
     <Canvas
       camera={{
-        position: [0.1, 0.85, 0], // back seat: slightly forward, raised to eye level
+        position: [0.05, 1.05, 0], // back seat eye level
         fov: 75,
         near: 0.01,
         far: 300,
       }}
       onCreated={({ camera }) => {
-        camera.lookAt(-10, 0.6, 0); // look forward and slightly up to see road + sky
+        camera.lookAt(-10, 1.0, 0); // look toward horizon through windshield
       }}
       shadows
       style={{ position: 'absolute', inset: 0 }}
