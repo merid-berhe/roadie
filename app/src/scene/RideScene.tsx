@@ -1,261 +1,262 @@
 // Three.js / R3F ride scene — back-seat POV inside the Cicada retro car.
-// Camera at [0, 1.5, 0] looking toward -Y (front of car / windshield).
-// World objects move toward the camera on the Y axis to simulate forward motion.
+// Coordinate system (glTF standard, Y-up):
+//   Y = up/down   X = left/right   Z = front(−)/rear(+)
+// Car front faces −Z. Camera at [0, 0.8, 1.5] = back seat, looking toward −Z.
+// World objects placed ahead at negative Z, moved toward +Z as ride progresses.
 
-import { Suspense, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useMemo, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RoadId } from './scenes';
 
+const WORLD_SPEED = 12; // units/sec
+
 // ── Car ────────────────────────────────────────────────────────────────────
 function CicadaCar() {
   const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
-  // Model is positioned so back seat = [0,1.5,0]. No transform needed.
   return <primitive object={scene} />;
 }
 
-// ── World (road + scenery moving toward camera) ────────────────────────────
-type WorldProps = {
-  road: RoadId;
-  positionSec: number;
-};
+// ── World wrapper — moves along +Z so objects approach from −Z ─────────────
+function MovingWorld({ positionSec, children }: { positionSec: number; children: React.ReactNode }) {
+  const groupRef = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!groupRef.current) return;
+    // Wrap every 200 units so the world loops
+    groupRef.current.position.z = (positionSec * WORLD_SPEED) % 200;
+  });
+  return <group ref={groupRef}>{children}</group>;
+}
 
-// Speed in world units per second of ride time
-const WORLD_SPEED = 8;
-
-function DesertWorld({ offset }: { offset: number }) {
-  // Ground plane
-  // Saguaro cactus positions — deterministic, recycled as world scrolls
-  const cacti = useMemo(() => Array.from({ length: 20 }, (_, i) => ({
-    x: (Math.sin(i * 127.1) * 0.5 + 0.5) * 6 - 3 + (i % 2 === 0 ? 2 : -2),
-    z: (Math.sin(i * 311.7) * 0.5) * 0.8,
-    scale: 0.3 + Math.abs(Math.sin(i * 43.7)) * 0.4,
-    spacing: 4 + Math.abs(Math.sin(i * 91.3)) * 4,
+// ── Scene themes ────────────────────────────────────────────────────────────
+function DesertScene() {
+  const cacti = useMemo(() => Array.from({ length: 30 }, (_, i) => ({
+    x: (i % 2 === 0 ? 1 : -1) * (2.5 + Math.abs(Math.sin(i * 73.1)) * 4),
+    z: -i * 7 - 5,
+    s: 0.4 + Math.abs(Math.sin(i * 43.7)) * 0.5,
   })), []);
 
   return (
-    <group position-y={-offset % 100}>
+    <>
       {/* Ground */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.5, 0]} receiveShadow>
-        <planeGeometry args={[30, 200]} />
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
+        <planeGeometry args={[40, 400]} />
         <meshLambertMaterial color={0x9c6b3c} />
       </mesh>
-
-      {/* Road strip */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.49, 0]}>
-        <planeGeometry args={[1.2, 200]} />
+      {/* Road */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
+        <planeGeometry args={[1.6, 400]} />
         <meshLambertMaterial color={0x3a3330} />
       </mesh>
-
-      {/* Road dashes */}
-      {Array.from({ length: 25 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -1.48, -4 + i * 8]}>
-          <planeGeometry args={[0.08, 1.5]} />
+      {/* Road dashes — 50 of them spread across the road length */}
+      {Array.from({ length: 50 }, (_, i) => (
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
+          <planeGeometry args={[0.1, 1.8]} />
           <meshBasicMaterial color={0xf4d03f} />
         </mesh>
       ))}
-
-      {/* Cacti */}
+      {/* Saguaro cacti */}
       {cacti.map((c, i) => (
-        <group key={i} position={[c.x, -1.5, c.z - (i * c.spacing)]}>
-          {/* Trunk */}
-          <mesh position={[0, c.scale * 1, 0]} scale={[c.scale * 0.15, c.scale * 2, c.scale * 0.15]}>
+        <group key={i} position={[c.x, -0.5, c.z]}>
+          <mesh position={[0, c.s, 0]} scale={[c.s * 0.15, c.s * 2, c.s * 0.15]}>
+            <cylinderGeometry args={[1, 1, 1, 7]} />
+            <meshLambertMaterial color={0x3a6b3a} />
+          </mesh>
+          <mesh position={[-c.s * 0.55, c.s * 0.7, 0]} rotation-z={Math.PI / 2.8}
+            scale={[c.s * 0.1, c.s * 0.9, c.s * 0.1]}>
             <cylinderGeometry args={[1, 1, 1, 6]} />
             <meshLambertMaterial color={0x3a6b3a} />
           </mesh>
-          {/* Left arm */}
-          <mesh position={[-c.scale * 0.6, c.scale * 0.8, 0]} rotation-z={Math.PI / 3}
-            scale={[c.scale * 0.1, c.scale * 0.8, c.scale * 0.1]}>
-            <cylinderGeometry args={[1, 1, 1, 6]} />
-            <meshLambertMaterial color={0x3a6b3a} />
-          </mesh>
-          {/* Right arm */}
-          <mesh position={[c.scale * 0.6, c.scale * 1.0, 0]} rotation-z={-Math.PI / 2.5}
-            scale={[c.scale * 0.1, c.scale * 0.7, c.scale * 0.1]}>
+          <mesh position={[c.s * 0.55, c.s * 0.9, 0]} rotation-z={-Math.PI / 2.5}
+            scale={[c.s * 0.1, c.s * 0.7, c.s * 0.1]}>
             <cylinderGeometry args={[1, 1, 1, 6]} />
             <meshLambertMaterial color={0x3a6b3a} />
           </mesh>
         </group>
       ))}
-
-      {/* Far mesas */}
-      {Array.from({ length: 6 }, (_, i) => (
-        <mesh key={i} position={[
-          (i % 2 === 0 ? 1 : -1) * (4 + i * 1.5),
-          -0.5,
-          -10 - i * 12,
-        ]}>
-          <cylinderGeometry args={[1.5 + i * 0.3, 2 + i * 0.4, 1.5 + i * 0.2, 5]} />
+      {/* Distant mesas */}
+      {Array.from({ length: 8 }, (_, i) => (
+        <mesh key={i} position={[(i % 2 === 0 ? 1 : -1) * (6 + i), -0.1, -20 - i * 15]}>
+          <cylinderGeometry args={[1.5, 2.2, 1.8, 5]} />
           <meshLambertMaterial color={0xc17f59} />
         </mesh>
       ))}
-    </group>
+    </>
   );
 }
 
-function CoastWorld({ offset }: { offset: number }) {
+function CoastScene() {
   return (
-    <group position-y={-offset % 100}>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.5, 0]} receiveShadow>
-        <planeGeometry args={[30, 200]} />
+    <>
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
+        <planeGeometry args={[40, 400]} />
         <meshLambertMaterial color={0x4a7c59} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.49, 0]}>
-        <planeGeometry args={[1.2, 200]} />
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
+        <planeGeometry args={[1.6, 400]} />
         <meshLambertMaterial color={0x3a3a3a} />
       </mesh>
-      {Array.from({ length: 25 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -1.48, -4 + i * 8]}>
-          <planeGeometry args={[0.08, 1.5]} />
+      {Array.from({ length: 50 }, (_, i) => (
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
+          <planeGeometry args={[0.1, 1.8]} />
           <meshBasicMaterial color={0xffffff} />
         </mesh>
       ))}
-      {/* Ocean horizon */}
-      <mesh rotation-x={-Math.PI / 2} position={[8, -1.48, -30]}>
-        <planeGeometry args={[14, 200]} />
+      {/* Ocean */}
+      <mesh rotation-x={-Math.PI / 2} position={[10, -0.48, -100]}>
+        <planeGeometry args={[18, 400]} />
         <meshLambertMaterial color={0x1a6e8a} />
       </mesh>
-    </group>
+      {/* Cliff edge */}
+      {Array.from({ length: 12 }, (_, i) => (
+        <mesh key={i} position={[6 + i * 0.3, -0.1, -i * 16]}>
+          <boxGeometry args={[2, 1.2, 4]} />
+          <meshLambertMaterial color={0x8b7355} />
+        </mesh>
+      ))}
+    </>
   );
 }
 
-function MountainWorld({ offset }: { offset: number }) {
+function MountainScene() {
   return (
-    <group position-y={-offset % 100}>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.5, 0]} receiveShadow>
-        <planeGeometry args={[30, 200]} />
+    <>
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
+        <planeGeometry args={[40, 400]} />
         <meshLambertMaterial color={0x3a5040} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.49, 0]}>
-        <planeGeometry args={[1.2, 200]} />
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
+        <planeGeometry args={[1.6, 400]} />
         <meshLambertMaterial color={0x2a2a2a} />
       </mesh>
-      {Array.from({ length: 25 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -1.48, -4 + i * 8]}>
-          <planeGeometry args={[0.08, 1.5]} />
+      {Array.from({ length: 50 }, (_, i) => (
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
+          <planeGeometry args={[0.1, 1.8]} />
           <meshBasicMaterial color={0xffffff} />
         </mesh>
       ))}
-      {/* Pine trees */}
-      {Array.from({ length: 16 }, (_, i) => {
+      {Array.from({ length: 20 }, (_, i) => {
         const side = i % 2 === 0 ? 2.5 : -2.5;
-        const z = -i * 6;
-        const h = 1 + Math.abs(Math.sin(i * 37)) * 0.8;
+        const h = 1.2 + Math.abs(Math.sin(i * 37)) * 1.2;
         return (
-          <group key={i} position={[side, -1.5, z]}>
-            <mesh position={[0, h * 0.6, 0]} scale={[0.3, h, 0.3]}>
-              <coneGeometry args={[1, 1, 6]} />
+          <group key={i} position={[side, -0.5, -i * 9]}>
+            <mesh position={[0, h * 0.55, 0]} scale={[0.35, h, 0.35]}>
+              <coneGeometry args={[1, 1, 7]} />
               <meshLambertMaterial color={0x1a3a2a} />
             </mesh>
-            <mesh position={[0, h * 0.25, 0]} scale={[0.5, h * 0.5, 0.5]}>
-              <coneGeometry args={[1, 1, 6]} />
+            <mesh position={[0, h * 0.22, 0]} scale={[0.55, h * 0.55, 0.55]}>
+              <coneGeometry args={[1, 1, 7]} />
               <meshLambertMaterial color={0x1a3a2a} />
             </mesh>
           </group>
         );
       })}
-    </group>
-  );
-}
-
-function CityWorld({ offset }: { offset: number }) {
-  return (
-    <group position-y={-offset % 100}>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.5, 0]} receiveShadow>
-        <planeGeometry args={[30, 200]} />
-        <meshLambertMaterial color={0x1a1a1a} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -1.49, 0]}>
-        <planeGeometry args={[1.2, 200]} />
-        <meshLambertMaterial color={0x111111} />
-      </mesh>
-      {Array.from({ length: 25 }, (_, i) => (
-        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -1.48, -4 + i * 8]}>
-          <planeGeometry args={[0.08, 1.5]} />
-          <meshBasicMaterial color={0x555577} />
+      {/* Mountain peaks far background */}
+      {Array.from({ length: 5 }, (_, i) => (
+        <mesh key={i} position={[(i - 2) * 5, 1.5, -40 - i * 8]}>
+          <coneGeometry args={[3, 5 + i, 5]} />
+          <meshLambertMaterial color={0x6b7c8a} />
         </mesh>
       ))}
-      {/* Buildings */}
-      {Array.from({ length: 12 }, (_, i) => {
-        const side = i % 2 === 0 ? 4 + (i % 3) : -4 - (i % 3);
-        const h = 2 + Math.abs(Math.sin(i * 73)) * 4;
-        const z = -i * 8;
-        return (
-          <mesh key={i} position={[side, -1.5 + h / 2, z]}>
-            <boxGeometry args={[1.2, h, 1.5]} />
-            <meshLambertMaterial color={0x1a1a2e} />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-}
-
-function World({ road, positionSec }: WorldProps) {
-  const offset = positionSec * WORLD_SPEED;
-  switch (road) {
-    case 'desert':   return <DesertWorld offset={offset} />;
-    case 'coast':    return <CoastWorld offset={offset} />;
-    case 'mountain': return <MountainWorld offset={offset} />;
-    case 'city':     return <CityWorld offset={offset} />;
-    default:         return <DesertWorld offset={offset} />;
-  }
-}
-
-// ── Scene root ─────────────────────────────────────────────────────────────
-type RideSceneProps = {
-  road: RoadId;
-  positionSec: number;
-};
-
-function SceneContent({ road, positionSec }: RideSceneProps) {
-  return (
-    <>
-      {/* Back-seat camera: position inside car, looking toward -Y (windshield) */}
-      {/* Camera is set on the Canvas element below */}
-
-      {/* Lighting */}
-      <ambientLight intensity={road === 'city' ? 0.3 : 1.2} />
-      <directionalLight
-        position={road === 'city' ? [0, 5, -2] : [3, 8, -5]}
-        intensity={road === 'city' ? 0.5 : 1.5}
-        color={road === 'desert' ? '#ffcc88' : '#ffffff'}
-        castShadow
-      />
-      {road === 'city' && <pointLight position={[0, 0, 0]} color="#6644ff" intensity={0.5} />}
-
-      {/* Sky background */}
-      <color attach="background" args={[
-        road === 'desert'   ? '#1a1040' :
-        road === 'coast'    ? '#87ceeb' :
-        road === 'mountain' ? '#1a2a4a' : '#0d0d1a'
-      ]} />
-
-      {/* The Cicada car — camera sits inside it */}
-      <Suspense fallback={null}>
-        <CicadaCar />
-      </Suspense>
-
-      {/* World scrolling toward camera */}
-      <World road={road} positionSec={positionSec} />
     </>
   );
 }
 
-export default function RideScene({ road, positionSec }: RideSceneProps) {
+function CityScene() {
+  return (
+    <>
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, -100]}>
+        <planeGeometry args={[40, 400]} />
+        <meshLambertMaterial color={0x1a1a1a} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.49, -100]}>
+        <planeGeometry args={[1.6, 400]} />
+        <meshLambertMaterial color={0x111111} />
+      </mesh>
+      {Array.from({ length: 50 }, (_, i) => (
+        <mesh key={i} rotation-x={-Math.PI / 2} position={[0, -0.48, -i * 8]}>
+          <planeGeometry args={[0.1, 1.8]} />
+          <meshBasicMaterial color={0x444466} />
+        </mesh>
+      ))}
+      {Array.from({ length: 16 }, (_, i) => {
+        const side = i % 2 === 0 ? 4 + (i % 4) * 0.8 : -4 - (i % 4) * 0.8;
+        const h = 2 + Math.abs(Math.sin(i * 73)) * 5;
+        return (
+          <group key={i} position={[side, -0.5 + h / 2, -i * 10]}>
+            <mesh>
+              <boxGeometry args={[1.5, h, 2]} />
+              <meshLambertMaterial color={0x1a1a2e} />
+            </mesh>
+            {/* Lit windows */}
+            {Array.from({ length: Math.floor(h * 1.5) }, (_, w) => (
+              <mesh key={w} position={[
+                Math.abs(Math.sin(w * 17.3)) > 0.5 ? 0.76 : -0.76,
+                -h / 2 + w * 0.6 + 0.3,
+                0,
+              ]}>
+                <planeGeometry args={[0.2, 0.25]} />
+                <meshBasicMaterial color={Math.sin(w * 31.7) > 0 ? 0xffcc66 : 0x66aaff} />
+              </mesh>
+            ))}
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
+function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number }) {
+  const bgColor = {
+    desert:   '#1a1040',
+    coast:    '#87ceeb',
+    mountain: '#1a2a4a',
+    city:     '#0d0d1a',
+  }[road];
+
+  const lightColor = road === 'desert' ? '#ffcc88' : '#ffffff';
+  const lightIntensity = road === 'city' ? 0.6 : 1.8;
+
+  return (
+    <>
+      <color attach="background" args={[bgColor]} />
+      <ambientLight intensity={road === 'city' ? 0.4 : 1.4} />
+      <directionalLight
+        position={road === 'city' ? [2, 6, 3] : [4, 8, 2]}
+        intensity={lightIntensity}
+        color={lightColor}
+        castShadow
+      />
+
+      {/* Car — camera is already positioned inside it */}
+      <Suspense fallback={null}>
+        <CicadaCar />
+      </Suspense>
+
+      {/* Scrolling world */}
+      <MovingWorld positionSec={positionSec}>
+        {road === 'desert'   && <DesertScene />}
+        {road === 'coast'    && <CoastScene />}
+        {road === 'mountain' && <MountainScene />}
+        {road === 'city'     && <CityScene />}
+      </MovingWorld>
+    </>
+  );
+}
+
+export default function RideScene({ road, positionSec }: { road: RoadId; positionSec: number }) {
   return (
     <Canvas
       camera={{
-        position: [0, 1.5, 0],       // back seat of Cicada
-        up: [0, 0, 1],               // Z is up in this model's space
+        position: [0, 0.8, 1.5],  // back seat: centred, seat height, behind front seats
         fov: 75,
         near: 0.01,
         far: 300,
       }}
       onCreated={({ camera }) => {
-        // Look toward front of car (-Y direction)
-        camera.lookAt(0, -10, 0);
+        // Look toward front of car (−Z direction, glTF standard)
+        camera.lookAt(0, 0.8, -10);
       }}
       shadows
       style={{ position: 'absolute', inset: 0 }}
