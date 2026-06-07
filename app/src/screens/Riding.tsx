@@ -119,7 +119,14 @@ export default function Riding() {
       className="relative h-screen overflow-hidden"
       style={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBottom})` }}
     >
-      <RideScene road={selectedRoad} positionSec={positionSec} />
+      <RideScene
+        road={selectedRoad}
+        positionSec={positionSec}
+        driverColor={driver?.color ?? '#F5A623'}
+        passengerColor={passenger?.color ?? '#1FB6C4'}
+        driverGestureKind={driverGestureKind}
+        passengerGestureKind={passengerGestureKind}
+      />
 
       {/* HUD */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-4 pt-2">
