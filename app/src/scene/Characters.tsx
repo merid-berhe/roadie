@@ -1,124 +1,89 @@
 // Front-seat occupant silhouettes — anonymous, tinted to glyph colour (§6/§7).
-// No faces, no customisation. Gesture animations: wave, heart, headlights.
+// Uses real GLB character models, silhouetted via colour override on all materials.
 
-import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useMemo, useEffect } from 'react';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { GestureKind } from '@roadie/shared';
 
-type Props = {
+const MALE_GLB   = '/assets/characters/psxprop_male_character_02_rigged.glb';
+const FEMALE_GLB = '/assets/characters/russian_girl_west_animated.glb';
+
+// Positions tuned to the Cicada car interior — back-seat camera at [0.05, 1.25, 0]
+// X = forward (−X = car front), Y = up, Z = left/right (+Z = driver side)
+// TUNE THESE in ?scene=1 then update here
+const DRIVER_POS:    [number, number, number] = [-0.85, 0.15, 0.28];
+const PASSENGER_POS: [number, number, number] = [-0.85, 0.15, -0.28];
+const CHAR_SCALE = 0.45; // scale both characters to fit car interior
+
+type OccupantProps = {
+  glbPath: string;
   position: [number, number, number];
   color: string;
-  gestureKind?: GestureKind | null;
-  side: 'driver' | 'passenger'; // which side — affects arm direction
+  scale?: number;
+  rotationY?: number; // face forward (toward −X = car front)
 };
 
-function Occupant({ position, color, gestureKind, side }: Props) {
-  const groupRef = useRef<THREE.Group>(null);
-  const headRef  = useRef<THREE.Mesh>(null);
-  const armRef   = useRef<THREE.Group>(null);
+function Occupant({ glbPath, position, color, scale = CHAR_SCALE, rotationY = 0 }: OccupantProps) {
+  const { scene } = useGLTF(glbPath);
 
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: new THREE.Color(color),
-    roughness: 0.88,
-    metalness: 0.05,
-  }), [color]);
+  // Clone so two instances don't share the same object
+  const clone = useMemo(() => scene.clone(true), [scene]);
 
-  const HEAD_R = 0.11;
-  const NECK_H = 0.09;
-  const armDir = side === 'driver' ? -1 : 1; // arm raises on window side
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-
-    // Subtle idle breathing — very gentle, makes them feel present
-    if (groupRef.current) {
-      groupRef.current.position.y = position[1] + Math.sin(t * 0.7 + (side === 'driver' ? 0 : 1.2)) * 0.005;
-    }
-
-    // Wave — arm swings up from shoulder
-    if (armRef.current) {
-      const waving = gestureKind === 'wave';
-      armRef.current.visible = waving;
-      if (waving) {
-        armRef.current.rotation.z = armDir * (Math.PI * 0.25 + Math.sin(t * 6) * 0.35);
+  // Override all materials to a flat silhouette tinted to the rider's colour
+  useEffect(() => {
+    const tint = new THREE.Color(color);
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        // Replace with a simple standard material — no texture, just colour
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: tint,
+          roughness: 0.9,
+          metalness: 0.05,
+        });
+        mesh.castShadow = true;
       }
-    }
-
-    // Heart — gentle forward head lean
-    if (headRef.current) {
-      headRef.current.rotation.x = gestureKind === 'heart'
-        ? -0.15 + Math.sin(t * 2.5) * 0.06
-        : THREE.MathUtils.lerp(headRef.current.rotation.x, 0, 0.05);
-    }
-  });
+    });
+  }, [clone, color]);
 
   return (
-    <group ref={groupRef} position={position}>
-      {/* Head */}
-      <mesh ref={headRef} material={mat}>
-        <sphereGeometry args={[HEAD_R, 16, 12]} />
-      </mesh>
-
-      {/* Neck */}
-      <mesh position={[0, -HEAD_R - NECK_H / 2, 0]} material={mat}>
-        <cylinderGeometry args={[0.032, 0.038, NECK_H, 8]} />
-      </mesh>
-
-      {/* Shoulders — wide ellipsoid */}
-      <mesh position={[0, -HEAD_R - NECK_H - 0.1, 0]} scale={[0.24, 0.15, 0.17]} material={mat}>
-        <sphereGeometry args={[1, 12, 8]} />
-      </mesh>
-
-      {/* Upper torso visible above seat back */}
-      <mesh position={[0, -HEAD_R - NECK_H - 0.22, 0]} scale={[0.18, 0.14, 0.15]} material={mat}>
-        <sphereGeometry args={[1, 10, 7]} />
-      </mesh>
-
-      {/* Wave arm — only visible during gesture */}
-      <group ref={armRef} position={[armDir * 0.22, -HEAD_R - NECK_H - 0.05, 0]} visible={false}>
-        <mesh material={mat}>
-          <cylinderGeometry args={[0.03, 0.025, 0.22, 6]} />
-        </mesh>
-        {/* Hand */}
-        <mesh position={[0, 0.13, 0]} material={mat}>
-          <sphereGeometry args={[0.042, 8, 6]} />
-        </mesh>
-      </group>
-    </group>
+    <primitive
+      object={clone}
+      position={position}
+      scale={scale}
+      rotation={[0, rotationY, 0]}
+    />
   );
 }
 
-type CharactersProps = {
+export type CharactersProps = {
   driverColor: string;
   passengerColor: string;
   driverGestureKind?: GestureKind | null;
   passengerGestureKind?: GestureKind | null;
 };
 
-// Positions tuned to the Cicada car interior from back-seat camera at [0.05, 1.25, 0]
-// X = forward (-X = car front), Y = up, Z = left/right (+Z = driver side)
-const DRIVER_POS:    [number, number, number] = [-0.85, 0.88, 0.28];
-const PASSENGER_POS: [number, number, number] = [-0.85, 0.88, -0.28];
-
-export default function Characters({
-  driverColor, passengerColor,
-  driverGestureKind, passengerGestureKind,
-}: CharactersProps) {
+export default function Characters({ driverColor, passengerColor }: CharactersProps) {
   return (
     <>
+      {/* Driver — male, sits left (+Z side), faces forward (−X) */}
       <Occupant
+        glbPath={MALE_GLB}
         position={DRIVER_POS}
         color={driverColor}
-        gestureKind={driverGestureKind}
-        side="driver"
+        rotationY={-Math.PI / 2} // rotate to face −X (car front)
       />
+      {/* Passenger — female, sits right (−Z side), faces forward (−X) */}
       <Occupant
+        glbPath={FEMALE_GLB}
         position={PASSENGER_POS}
         color={passengerColor}
-        gestureKind={passengerGestureKind}
-        side="passenger"
+        rotationY={-Math.PI / 2}
       />
     </>
   );
 }
+
+useGLTF.preload(MALE_GLB);
+useGLTF.preload(FEMALE_GLB);

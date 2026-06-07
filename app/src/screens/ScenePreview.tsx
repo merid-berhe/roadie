@@ -87,6 +87,8 @@ export default function ScenePreview() {
         <input type="color" value={passengerColor} onChange={(e) => setPassengerColor(e.target.value)}
           className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent" />
 
+        <a href="?inspect=1" className="ml-2 rounded bg-white/10 px-2 py-0.5 text-white/50 hover:text-white">inspector →</a>
+
         {/* Gestures */}
         <span className="text-white/40 ml-2">driver gesture:</span>
         <select value={driverGesture ?? 'none'} onChange={(e) => setDriverGesture(e.target.value === 'none' ? null : e.target.value as GestureKind)}
