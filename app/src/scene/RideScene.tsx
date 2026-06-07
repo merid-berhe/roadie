@@ -4,6 +4,8 @@
 import { Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
+import Characters from './Characters';
+import type { GestureKind } from '@roadie/shared';
 
 const TERRAIN_LEN = 120; // terrain X length at scale 0.01
 
@@ -174,7 +176,16 @@ function TerrainFollower({ worldRef }: { worldRef: React.RefObject<THREE.Group |
   return null;
 }
 
-function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number }) {
+type SceneProps = {
+  road: RoadId;
+  positionSec: number;
+  driverColor: string;
+  passengerColor: string;
+  driverGestureKind?: GestureKind | null;
+  passengerGestureKind?: GestureKind | null;
+};
+
+function SceneContent({ road, positionSec, driverColor, passengerColor, driverGestureKind, passengerGestureKind }: SceneProps) {
   const worldRef = useRef<THREE.Group>(null);
   const bgColor = {
     desert:   '#1a1040',
@@ -201,6 +212,14 @@ function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number
         <CicadaCar />
       </Suspense>
 
+      {/* Front-seat occupant silhouettes (§6/§7) */}
+      <Characters
+        driverColor={driverColor}
+        passengerColor={passengerColor}
+        driverGestureKind={driverGestureKind}
+        passengerGestureKind={passengerGestureKind}
+      />
+
       {/* Terrain elevation follower — keeps camera riding on road surface */}
       {road === 'desert' && <TerrainFollower worldRef={worldRef} />}
 
@@ -215,7 +234,7 @@ function SceneContent({ road, positionSec }: { road: RoadId; positionSec: number
   );
 }
 
-export default function RideScene({ road, positionSec }: { road: RoadId; positionSec: number }) {
+export default function RideScene({ road, positionSec, driverColor, passengerColor, driverGestureKind, passengerGestureKind }: SceneProps) {
   return (
     <Canvas
       camera={{
@@ -230,7 +249,10 @@ export default function RideScene({ road, positionSec }: { road: RoadId; positio
       shadows
       style={{ position: 'absolute', inset: 0 }}
     >
-      <SceneContent road={road} positionSec={positionSec} />
+      <SceneContent road={road} positionSec={positionSec}
+        driverColor={driverColor} passengerColor={passengerColor}
+        driverGestureKind={driverGestureKind} passengerGestureKind={passengerGestureKind}
+      />
     </Canvas>
   );
 }
