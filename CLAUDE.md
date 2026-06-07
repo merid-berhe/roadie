@@ -105,6 +105,13 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 ---
 
+#### 2026-06-07 — Production scene work: Three.js, terrain, characters (parked)
+- **Completed:** Three.js + R3F fully wired replacing PixiJS. Cicada GLB car interior loaded with back-seat camera (pos [0.05, 1.25, 0], looking −X). Real desert terrain (`road_terrain.glb`, scale 0.01) with 2-tile looping + world-Y elevation follower (terrain adjusts under car, camera stays inside). Cruise speed 4 units/sec. `?scene=1` preview shortcut (no party server, live road/gesture/colour controls). `?inspect=1` updated with live camera coords + terrain Y slider. masterRule bumped to v4.0 (production). MOCK_MUSIC flag. 4 procedural 3D scene themes (desert/coast/mountain/city).
+- **Parked:** Character silhouettes — programmatic blobs look bad; real GLB files (psxprop_male + russian_girl_animated) are in wrong pose/orientation for front seats. Need proper seated-pose GLBs. Revisit when right assets are sourced.
+- **Next options:** Scene environment quality (sky, lighting, atmosphere per mood); Lounge/landing page; camera free-look (Tier 1 from backlog); other road terrain assets for coast/mountain/city.
+
+---
+
 #### 2026-06-06 — Production begins: Three.js migration decision
 - **Completed:** masterRule.md bumped to v4.0 (Production). Scene engine decision: PixiJS 2D → Three.js + @react-three/fiber. Back-seat POV becomes a real 3D camera inside a GLB car interior. 4 scene themes stay but built in 3D. MOCK_MUSIC flag added (skip fal.ai charges during visual testing: `npm run dev:party:mock`). Forward-perspective road with animated vanishing-point dashes added to current PixiJS scene (interim). All docs updated (masterRule, BACKLOG, session log).
 - **In flight:** Three.js migration (PixiJS removed, R3F scene component replacing SceneCanvas).

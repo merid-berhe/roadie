@@ -26,7 +26,8 @@ Build a clean SVG/vector cabin frame in code (Florence-style flat shapes): roof 
 - Back-seat POV is rare in stock — source via Fiverr / itch.io artist boards / r/gameDevClassifieds
 - Style reference: Florence cabin interiors
 
-### 1d. Occupant silhouettes — BUILDING: SVG head/shoulder shapes with gesture animation
+### 1d. Occupant silhouettes — PARKED (needs right assets)
+Programmatic blobs attempted — not good enough. GLB files tried (psxprop_male_rigged, russian_girl_animated) — wrong pose (standing/animated, not seated). Need **seated-pose humanoid GLBs** before revisiting. Source from Sketchfab ("character sitting car") or Kenney. Once found: tint all materials to glyph colour via Three.js material traversal, gesture animations via useFrame.
 Replace Unicode glyphs with proper SVG silhouettes:
 - Head + shoulder outline, tinted to rider's glyph color
 - Gesture animation frames: raised hand (wave), head turn (headlights/heart)
