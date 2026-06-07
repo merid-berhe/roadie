@@ -26,15 +26,6 @@ function RoadTerrain({ y }: { y: number }) {
   return <primitive object={scene} scale={0.01} position={[-5.12, y, 0.04]} />;
 }
 
-function MaleChar() {
-  const { scene } = useGLTF('/assets/characters/psxprop_male_character_02_rigged.glb');
-  return <primitive object={scene} position={[0, 0, 1.5]} />;
-}
-
-function FemaleChar() {
-  const { scene } = useGLTF('/assets/characters/russian_girl_west_animated.glb');
-  return <primitive object={scene} position={[0, 0, -1.5]} />;
-}
 
 function CameraMarker({ pos }: { pos: [number, number, number] }) {
   return (
@@ -115,9 +106,6 @@ export default function ModelInspector() {
           <Suspense fallback={<Html center><p className="text-white text-sm">loading…</p></Html>}>
             <CarModel rotation={rot} />
             <RoadTerrain y={terrainY} />
-            {/* Characters shown at Z offset from car — scale 1 so we see native size/pose */}
-            <MaleChar />
-            <FemaleChar />
           </Suspense>
 
           <CameraMarker pos={camPos} />
