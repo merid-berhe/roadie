@@ -30,6 +30,13 @@ function Occupant({ glbPath, position, color, scale = CHAR_SCALE, rotationY = 0 
   // Clone so two instances don't share the same object
   const clone = useMemo(() => scene.clone(true), [scene]);
 
+  // Log bounding box so we can determine correct scale
+  useEffect(() => {
+    const box = new THREE.Box3().setFromObject(clone);
+    const size = box.getSize(new THREE.Vector3());
+    console.log(`[char] ${glbPath.split('/').pop()} size:`, size);
+  }, [clone, glbPath]);
+
   // Override all materials to a flat silhouette tinted to the rider's colour
   useEffect(() => {
     const tint = new THREE.Color(color);
