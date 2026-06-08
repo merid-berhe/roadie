@@ -88,7 +88,7 @@ function Scene({ positionSec, rideDuration, apiKey }: {
       // Add π/2 offset so the plugin's local -Z aligns with the road direction
       pluginRef.current.transformLatLonHeightToOrigin(
         lat * DEG, lon * DEG,
-        50,   // Paris terrain ~35m above WGS84 ellipsoid; 50 = ~15m above ground
+        120,  // Paris terrain ~81m above WGS84 ellipsoid; 120 = ~40m above rooftops
         prevAz.current + Math.PI / 2,
         0,
         0
@@ -121,7 +121,7 @@ function Scene({ positionSec, rideDuration, apiKey }: {
           args={[{
             lat: PARIS_ROUTE[0].lat * DEG,
             lon: PARIS_ROUTE[0].lon * DEG,
-            height: 50,  // above WGS84 ellipsoid; Paris terrain ~35m, so ~15m above ground
+            height: 120, // Paris terrain ~81m above WGS84; 120 = ~40m above rooftops to confirm upright
             up: '+y',
           }] as any}
         />
