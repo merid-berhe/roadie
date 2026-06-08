@@ -67,9 +67,7 @@ export default function ParisTiles({ positionSec: _positionSec }: Props) {
           <GlobeControls
             ref={controlsRef}
             enableDamping
-            zoomSpeed={3}
-            minDistance={MIN_DIST}
-            maxDistance={MAX_DIST}
+            zoomSpeed={5}
           />
         </TilesRenderer>
       </Canvas>
