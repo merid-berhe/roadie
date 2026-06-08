@@ -3,11 +3,9 @@
 
 import { useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — 3d-tiles-renderer R3F subpath types may not resolve cleanly
-import { TilesRenderer, TilesPlugin } from '3d-tiles-renderer/r3f';
+// @ts-ignore
+import { TilesRenderer, TilesPlugin, GlobeControls } from '3d-tiles-renderer/r3f';
 import { GoogleCloudAuthPlugin, ReorientationPlugin } from '3d-tiles-renderer/plugins';
-import * as THREE from 'three';
 
 const DEG = Math.PI / 180;
 
@@ -30,25 +28,39 @@ function lerpRoute(t: number) {
   };
 }
 
-function Scene({ positionSec, rideDuration, apiKey }: { positionSec: number; rideDuration: number; apiKey: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Scene({ positionSec, rideDuration, apiKey }: {
+  positionSec: number;
+  rideDuration: number;
+  apiKey: string;
+}) {
   const pluginRef = useRef<any>(null);
   const { camera } = useThree();
 
-  // Set camera to a low driving height
-  camera.near = 0.1;
-  camera.far = 1e7;
+  // Set camera clipping planes for city-scale rendering
+  camera.near = 0.5;
+  camera.far = 5000;
 
   useFrame(() => {
     const t = positionSec / rideDuration;
     const { lat, lon } = lerpRoute(t);
-    // Approximate forward heading from current to next position
     const { lat: lat2, lon: lon2 } = lerpRoute(Math.min(1, (positionSec + 3) / rideDuration));
-    const az = Math.atan2((lon2 - lon) * Math.cos(lat * DEG), lat2 - lat);
+
+    // Heading toward next waypoint (azimuth = compass bearing)
+    const az = Math.atan2(
+      (lon2 - lon) * Math.cos(lat * DEG),
+      lat2 - lat
+    );
 
     if (pluginRef.current) {
-      // Move the tile origin to our current position, 80m above ground, facing forward
-      pluginRef.current.transformLatLonHeightToOrigin(lat * DEG, lon * DEG, 80, az, -0.08, 0);
+      // 5m above ground, facing forward along route, very slight upward tilt
+      pluginRef.current.transformLatLonHeightToOrigin(
+        lat * DEG,
+        lon * DEG,
+        5,    // height in metres — street level
+        az,   // azimuth — face direction of travel
+        0.05, // slight upward look
+        0
+      );
     }
   });
 
@@ -57,23 +69,20 @@ function Scene({ positionSec, rideDuration, apiKey }: { positionSec: number; rid
       <ambientLight intensity={3} />
       <directionalLight position={[1, 2, 1]} intensity={2} />
 
-      {/* Camera sits slightly behind and above the tile origin */}
-      {/* (tiles move relative to camera, giving driving feel) */}
-
       <TilesRenderer>
-        {/* Auth plugin — args is spread as constructor args, so wrap in array */}
-        <TilesPlugin plugin={GoogleCloudAuthPlugin} args={[{ apiToken: apiKey }] as unknown as []} />
-        {/* Reorientation — positions tiles at Paris lat/lon with Y-up */}
+        <TilesPlugin plugin={GoogleCloudAuthPlugin} args={[{ apiToken: apiKey }] as any} />
         <TilesPlugin
           ref={pluginRef}
           plugin={ReorientationPlugin}
           args={[{
             lat: PARIS_ROUTE[0].lat * DEG,
             lon: PARIS_ROUTE[0].lon * DEG,
-            height: 80,
+            height: 5,
             up: '+y',
-          }] as unknown as []}
+          }] as any}
         />
+        {/* Globe controls for mouse/touch navigation */}
+        <GlobeControls enableDamping />
       </TilesRenderer>
     </>
   );
@@ -93,7 +102,7 @@ export default function ParisTiles({ positionSec, rideDuration = 120 }: Props) {
           <code className="block rounded bg-white/10 px-3 py-2 text-xs text-amber-300">
             VITE_GOOGLE_MAPS_KEY=your_key_here
           </code>
-          <p className="text-xs text-white/30">Enable "Map Tiles API" in Google Cloud Console → restart npm run dev</p>
+          <p className="text-xs text-white/30">Enable "Map Tiles API" in Google Cloud Console</p>
         </div>
       </div>
     );
@@ -101,7 +110,15 @@ export default function ParisTiles({ positionSec, rideDuration = 120 }: Props) {
 
   return (
     <Canvas
-      camera={{ position: [0, 80, 0], fov: 70, near: 0.1, far: 1e7 }}
+      camera={{
+        position: [0, 5, 0],   // street level
+        fov: 70,
+        near: 0.5,
+        far: 5000,
+      }}
+      onCreated={({ camera }) => {
+        camera.lookAt(50, 5, 0); // look forward along route
+      }}
       gl={{ antialias: true, logarithmicDepthBuffer: true }}
       style={{ position: 'absolute', inset: 0 }}
     >
