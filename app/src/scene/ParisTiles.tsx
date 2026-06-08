@@ -1,21 +1,22 @@
-// Google Photorealistic 3D Tiles — Paris proof of concept.
-// Requires VITE_GOOGLE_MAPS_KEY in app/.env.local with Map Tiles API enabled.
+// Google Photorealistic 3D Tiles — Paris driving proof of concept.
+// Camera automatically drives along the route at street level.
+// Drag to look around while the route plays.
 
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 // @ts-ignore
-import { TilesRenderer, TilesPlugin, GlobeControls } from '3d-tiles-renderer/r3f';
+import { TilesRenderer, TilesPlugin } from '3d-tiles-renderer/r3f';
 import { GoogleCloudAuthPlugin, ReorientationPlugin } from '3d-tiles-renderer/plugins';
+import * as THREE from 'three';
 
 const DEG = Math.PI / 180;
 
-// Paris scenic route: Notre Dame → Louvre → Concorde → Arc de Triomphe → Eiffel Tower
 const PARIS_ROUTE = [
-  { lat: 48.8530, lon: 2.3499 },
-  { lat: 48.8606, lon: 2.3376 },
-  { lat: 48.8656, lon: 2.3212 },
-  { lat: 48.8698, lon: 2.3078 },
-  { lat: 48.8584, lon: 2.2945 },
+  { lat: 48.8530, lon: 2.3499 }, // Notre Dame
+  { lat: 48.8606, lon: 2.3376 }, // Louvre
+  { lat: 48.8656, lon: 2.3212 }, // Place de la Concorde
+  { lat: 48.8698, lon: 2.3078 }, // Arc de Triomphe
+  { lat: 48.8584, lon: 2.2945 }, // Eiffel Tower
 ];
 
 function lerpRoute(t: number) {
@@ -28,39 +29,77 @@ function lerpRoute(t: number) {
   };
 }
 
-function Scene({ positionSec, rideDuration, apiKey }: {
-  positionSec: number;
-  rideDuration: number;
-  apiKey: string;
-}) {
-  const pluginRef = useRef<any>(null);
-  const { camera } = useThree();
+// Simple drag-to-look — doesn't interfere with tile loading
+function PointerLook() {
+  const { camera, gl } = useThree();
+  const drag   = useRef(false);
+  const last   = useRef({ x: 0, y: 0 });
+  const euler  = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
 
-  // Set camera clipping planes for city-scale rendering
-  camera.near = 0.5;
-  camera.far = 5000;
+  useEffect(() => {
+    const el = gl.domElement;
+    const down = (e: PointerEvent) => { drag.current = true; last.current = { x: e.clientX, y: e.clientY }; };
+    const up   = () => { drag.current = false; };
+    const move = (e: PointerEvent) => {
+      if (!drag.current) return;
+      const dx = e.clientX - last.current.x;
+      const dy = e.clientY - last.current.y;
+      last.current = { x: e.clientX, y: e.clientY };
+      euler.current.setFromQuaternion(camera.quaternion);
+      euler.current.y -= dx * 0.003;
+      euler.current.x -= dy * 0.003;
+      euler.current.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, euler.current.x));
+      camera.quaternion.setFromEuler(euler.current);
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointermove', move);
+    return () => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointerup', up); el.removeEventListener('pointermove', move); };
+  }, [camera, gl]);
+
+  return null;
+}
+
+function Scene({ positionSec, rideDuration, apiKey }: {
+  positionSec: number; rideDuration: number; apiKey: string;
+}) {
+  const pluginRef  = useRef<any>(null);
+  const tilesRef   = useRef<any>(null);
+  const { camera, gl } = useThree();
+  const prevAz     = useRef(0);
+
+  // Fix camera clipping for city scale
+  useEffect(() => {
+    camera.near = 0.5;
+    camera.far  = 4000;
+    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
+  }, [camera]);
 
   useFrame(() => {
-    const t = positionSec / rideDuration;
-    const { lat, lon } = lerpRoute(t);
-    const { lat: lat2, lon: lon2 } = lerpRoute(Math.min(1, (positionSec + 3) / rideDuration));
+    const t  = positionSec / rideDuration;
+    const { lat, lon }     = lerpRoute(t);
+    const { lat: lat2, lon: lon2 } = lerpRoute(Math.min(1, (positionSec + 2) / rideDuration));
 
-    // Heading toward next waypoint (azimuth = compass bearing)
-    const az = Math.atan2(
-      (lon2 - lon) * Math.cos(lat * DEG),
-      lat2 - lat
-    );
+    // Smooth heading
+    const targetAz = Math.atan2((lon2 - lon) * Math.cos(lat * DEG), lat2 - lat);
+    prevAz.current += (targetAz - prevAz.current) * 0.05;
 
     if (pluginRef.current) {
-      // 5m above ground, facing forward along route, very slight upward tilt
       pluginRef.current.transformLatLonHeightToOrigin(
-        lat * DEG,
-        lon * DEG,
-        5,    // height in metres — street level
-        az,   // azimuth — face direction of travel
-        0.05, // slight upward look
+        lat * DEG, lon * DEG,
+        2.0,         // 2m above ground = car window height
+        prevAz.current,
+        0,           // no pitch — straight forward
         0
       );
+    }
+
+    // Keep camera at origin looking forward (tiles move around it)
+    camera.position.set(0, 0, 0);
+
+    // Update tile resolution every frame for maximum quality at current view
+    if (tilesRef.current) {
+      tilesRef.current.setResolutionFromRenderer(camera, gl);
     }
   });
 
@@ -69,7 +108,11 @@ function Scene({ positionSec, rideDuration, apiKey }: {
       <ambientLight intensity={3} />
       <directionalLight position={[1, 2, 1]} intensity={2} />
 
-      <TilesRenderer>
+      <TilesRenderer
+        ref={tilesRef}
+        errorTarget={2}          // low = higher quality tiles loaded (default ~6)
+        maxCachedBytes={250 * 1024 * 1024}  // 250MB cache for smooth driving
+      >
         <TilesPlugin plugin={GoogleCloudAuthPlugin} args={[{ apiToken: apiKey }] as any} />
         <TilesPlugin
           ref={pluginRef}
@@ -77,13 +120,13 @@ function Scene({ positionSec, rideDuration, apiKey }: {
           args={[{
             lat: PARIS_ROUTE[0].lat * DEG,
             lon: PARIS_ROUTE[0].lon * DEG,
-            height: 5,
+            height: 2,
             up: '+y',
           }] as any}
         />
-        {/* Globe controls for mouse/touch navigation */}
-        <GlobeControls enableDamping />
       </TilesRenderer>
+
+      <PointerLook />
     </>
   );
 }
@@ -95,14 +138,12 @@ export default function ParisTiles({ positionSec, rideDuration = 120 }: Props) {
 
   if (!apiKey) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0a0d1a] text-white/60 text-sm">
+      <div className="flex h-full items-center justify-center bg-[#0a0d1a] text-sm text-white/60">
         <div className="space-y-2 text-center">
           <p className="text-lg font-semibold text-white">Google Maps key needed</p>
-          <p>Add to <code className="text-amber-400">app/.env.local</code>:</p>
           <code className="block rounded bg-white/10 px-3 py-2 text-xs text-amber-300">
-            VITE_GOOGLE_MAPS_KEY=your_key_here
+            VITE_GOOGLE_MAPS_KEY=your_key — app/.env.local
           </code>
-          <p className="text-xs text-white/30">Enable "Map Tiles API" in Google Cloud Console</p>
         </div>
       </div>
     );
@@ -110,14 +151,15 @@ export default function ParisTiles({ positionSec, rideDuration = 120 }: Props) {
 
   return (
     <Canvas
-      camera={{
-        position: [0, 5, 0],   // street level
-        fov: 70,
-        near: 0.5,
-        far: 5000,
-      }}
+      camera={{ position: [0, 0, 0], fov: 70, near: 0.5, far: 4000 }}
       onCreated={({ camera }) => {
-        camera.lookAt(50, 5, 0); // look forward along route
+        // Face forward along initial route heading
+        const az = Math.atan2(
+          (PARIS_ROUTE[1].lon - PARIS_ROUTE[0].lon) * Math.cos(PARIS_ROUTE[0].lat * DEG),
+          PARIS_ROUTE[1].lat - PARIS_ROUTE[0].lat
+        );
+        camera.rotation.order = 'YXZ';
+        camera.rotation.y = az + Math.PI; // face forward (tiles are reoriented)
       }}
       gl={{ antialias: true, logarithmicDepthBuffer: true }}
       style={{ position: 'absolute', inset: 0 }}
