@@ -3,9 +3,49 @@
 
 import { Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
+import { useGLTF, OrbitControls } from '@react-three/drei';
 import Characters from './Characters';
 import type { GestureKind } from '@roadie/shared';
+
+export type CameraMode = 'interior' | 'exterior';
+
+// Camera positions
+const INTERIOR_POS    = new THREE.Vector3(0.05, 1.25, 0);
+const INTERIOR_TARGET = new THREE.Vector3(-10, 1.0,  0);
+const EXTERIOR_POS    = new THREE.Vector3(3.5,  2.2,  1.5); // behind+above+side
+const EXTERIOR_TARGET = new THREE.Vector3(0,    0.6,  0);
+
+function CameraController({ mode }: { mode: CameraMode }) {
+  const { camera } = useThree();
+  const pos    = useRef(INTERIOR_POS.clone());
+  const target = useRef(INTERIOR_TARGET.clone());
+  const orbitRef = useRef<any>(null);
+
+  useFrame(() => {
+    const wantPos    = mode === 'interior' ? INTERIOR_POS    : EXTERIOR_POS;
+    const wantTarget = mode === 'interior' ? INTERIOR_TARGET : EXTERIOR_TARGET;
+    const speed = 0.06;
+    pos.current.lerp(wantPos,       speed);
+    target.current.lerp(wantTarget, speed);
+    camera.position.copy(pos.current);
+    camera.lookAt(target.current);
+    if (orbitRef.current) {
+      orbitRef.current.target.copy(target.current);
+      orbitRef.current.update();
+    }
+  });
+
+  return (
+    <OrbitControls
+      ref={orbitRef}
+      enabled={mode === 'exterior'}
+      enablePan={false}
+      minDistance={1.5}
+      maxDistance={10}
+      makeDefault={false}
+    />
+  );
+}
 
 const TERRAIN_LEN = 120; // terrain X length at scale 0.01
 
@@ -183,9 +223,11 @@ type SceneProps = {
   passengerColor: string;
   driverGestureKind?: GestureKind | null;
   passengerGestureKind?: GestureKind | null;
+  cameraMode?: CameraMode;
+  pixelRatio?: number;
 };
 
-function SceneContent({ road, positionSec, driverColor, passengerColor, driverGestureKind, passengerGestureKind }: SceneProps) {
+function SceneContent({ road, positionSec, driverColor, passengerColor, driverGestureKind, passengerGestureKind, cameraMode = 'interior' }: SceneProps) {
   const worldRef = useRef<THREE.Group>(null);
   const bgColor = {
     desert:   '#1a1040',
@@ -220,8 +262,11 @@ function SceneContent({ road, positionSec, driverColor, passengerColor, driverGe
         passengerGestureKind={passengerGestureKind}
       />
 
-      {/* Terrain elevation follower — keeps camera riding on road surface */}
-      {road === 'desert' && <TerrainFollower worldRef={worldRef} />}
+      {/* Camera controller — handles interior/exterior + smooth transition */}
+      <CameraController mode={cameraMode} />
+
+      {/* Terrain elevation follower — only in interior mode */}
+      {road === 'desert' && cameraMode === 'interior' && <TerrainFollower worldRef={worldRef} />}
 
       {/* Scrolling world */}
       <MovingWorld positionSec={positionSec} groupRef={worldRef}>
@@ -234,17 +279,15 @@ function SceneContent({ road, positionSec, driverColor, passengerColor, driverGe
   );
 }
 
-export default function RideScene({ road, positionSec, driverColor, passengerColor, driverGestureKind, passengerGestureKind }: SceneProps) {
+export default function RideScene({ road, positionSec, driverColor, passengerColor, driverGestureKind, passengerGestureKind, cameraMode = 'interior', pixelRatio = 1 }: SceneProps) {
   return (
     <Canvas
-      camera={{
-        position: [0.05, 1.25, 0], // raised to clear dashboard
-        fov: 75,
-        near: 0.01,
-        far: 300,
-      }}
-      onCreated={({ camera }) => {
-        camera.lookAt(-10, 0.7, 0); // tilt down to see road through windshield
+      camera={{ position: [0.05, 1.25, 0], fov: 75, near: 0.01, far: 300 }}
+      dpr={pixelRatio}
+      gl={{ antialias: pixelRatio >= 0.8 }} // antialias only at high res
+      onCreated={({ camera, gl }) => {
+        camera.lookAt(-10, 0.7, 0);
+        if (pixelRatio < 0.8) gl.domElement.style.imageRendering = 'pixelated';
       }}
       shadows
       style={{ position: 'absolute', inset: 0 }}
@@ -252,6 +295,7 @@ export default function RideScene({ road, positionSec, driverColor, passengerCol
       <SceneContent road={road} positionSec={positionSec}
         driverColor={driverColor} passengerColor={passengerColor}
         driverGestureKind={driverGestureKind} passengerGestureKind={passengerGestureKind}
+        cameraMode={cameraMode}
       />
     </Canvas>
   );
