@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import RideScene from '../scene/RideScene';
 import type { CameraMode } from '../scene/RideScene';
+import ParisTiles from '../scene/ParisTiles';
 import type { RoadId } from '../scene/scenes';
 import type { GestureKind } from '@roadie/shared';
 
@@ -21,6 +22,7 @@ export default function ScenePreview() {
   const [passengerGesture, setPassengerGesture] = useState<GestureKind | null>(null);
   const [cameraMode, setCameraMode]   = useState<CameraMode>('interior');
   const [pixelRatio, setPixelRatio]   = useState(0.25);
+  const [useGoogleMaps, setUseGoogleMaps] = useState(false);
 
   // rAF ticker
   const lastRef = useRef(performance.now());
@@ -38,23 +40,35 @@ export default function ScenePreview() {
 
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden">
-      {/* 3D Scene — dpr controls pixel resolution */}
-      <div className="absolute inset-0" style={{ imageRendering: 'pixelated' }}>
-        <RideScene
-          road={road}
-          positionSec={positionSec}
-          driverColor={driverColor}
-          passengerColor={passengerColor}
-          driverGestureKind={driverGesture}
-          passengerGestureKind={passengerGesture}
-          cameraMode={cameraMode}
-          pixelRatio={pixelRatio}
-        />
+      {/* 3D Scene */}
+      <div className="absolute inset-0" style={{ imageRendering: pixelRatio < 0.8 && !useGoogleMaps ? 'pixelated' : 'auto' }}>
+        {useGoogleMaps
+          ? <ParisTiles positionSec={positionSec} rideDuration={RIDE_DURATION} />
+          : <RideScene
+              road={road}
+              positionSec={positionSec}
+              driverColor={driverColor}
+              passengerColor={passengerColor}
+              driverGestureKind={driverGesture}
+              passengerGestureKind={passengerGesture}
+              cameraMode={cameraMode}
+              pixelRatio={pixelRatio}
+            />
+        }
       </div>
 
       {/* Controls — top bar */}
       <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-wrap items-center gap-2 bg-black/75 px-3 py-2 text-xs text-white backdrop-blur-sm">
         <span className="font-bold text-amber-400">scene</span>
+
+        {/* Google Maps toggle */}
+        <button
+          onClick={() => setUseGoogleMaps((g) => !g)}
+          className="rounded-full px-3 py-1 font-semibold transition"
+          style={{ background: useGoogleMaps ? '#4285F4' : 'rgba(255,255,255,0.12)', color: useGoogleMaps ? '#fff' : '#aaa' }}
+        >
+          {useGoogleMaps ? '🗺 Paris' : '🚗 car'}
+        </button>
 
         {/* Camera toggle — the main control */}
         <button
