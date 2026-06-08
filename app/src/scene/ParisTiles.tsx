@@ -85,17 +85,18 @@ function Scene({ positionSec, rideDuration, apiKey }: {
     prevAz.current += (targetAz - prevAz.current) * 0.05;
 
     if (pluginRef.current) {
+      // Add π/2 offset so the plugin's local -Z aligns with the road direction
       pluginRef.current.transformLatLonHeightToOrigin(
         lat * DEG, lon * DEG,
-        2.0,         // 2m above ground = car window height
-        prevAz.current,
-        0,           // no pitch — straight forward
+        2.0,                       // 2m above ground
+        prevAz.current + Math.PI / 2,
+        0,
         0
       );
     }
 
-    // Keep camera at origin looking forward (tiles move around it)
-    camera.position.set(0, 0, 0);
+    // Camera stays at street level — PointerLook handles rotation
+    camera.position.y = 2;
 
     // Update tile resolution every frame for maximum quality at current view
     if (tilesRef.current) {
@@ -151,15 +152,10 @@ export default function ParisTiles({ positionSec, rideDuration = 120 }: Props) {
 
   return (
     <Canvas
-      camera={{ position: [0, 0, 0], fov: 70, near: 0.5, far: 4000 }}
+      camera={{ position: [0, 2, 0], fov: 70, near: 0.5, far: 4000 }}
       onCreated={({ camera }) => {
-        // Face forward along initial route heading
-        const az = Math.atan2(
-          (PARIS_ROUTE[1].lon - PARIS_ROUTE[0].lon) * Math.cos(PARIS_ROUTE[0].lat * DEG),
-          PARIS_ROUTE[1].lat - PARIS_ROUTE[0].lat
-        );
-        camera.rotation.order = 'YXZ';
-        camera.rotation.y = az + Math.PI; // face forward (tiles are reoriented)
+        // Look forward along -Z (Three.js default). Plugin azimuth aligns road with -Z.
+        camera.lookAt(0, 2, -100);
       }}
       gl={{ antialias: true, logarithmicDepthBuffer: true }}
       style={{ position: 'absolute', inset: 0 }}
