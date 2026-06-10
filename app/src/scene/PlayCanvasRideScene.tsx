@@ -21,6 +21,9 @@ const FAR = 234;          // world tile length (z)
 const CELL = 6;           // terrain row length
 const ROWS = FAR / CELL;  // 39
 const WORLD_SPEED = 7;
+const ROAD_TOP = -0.57;   // y of the road surface
+const CAR_Z = -1.0;       // the hero car sits here, facing +z (toward the camera)
+const WRAP_AHEAD = 10;    // props recycle this far behind the camera, never on screen
 
 type Theme = {
   skyTop: number;
@@ -154,15 +157,22 @@ export default function PlayCanvasRideScene({
     app.scene.fog.start = theme.fogStart;
     app.scene.fog.end = theme.fogEnd;
 
+    // locked exterior camera: slightly elevated, looking at the car's front
     const camera = new pc.Entity('camera');
     camera.addComponent('camera', {
       clearColor: color(theme.skyTop, 1),
-      fov: 68,
-      nearClip: 0.03,
+      fov: 52,
+      nearClip: 0.05,
       farClip: 420,
     });
-    camera.setPosition(0, 1.12, 2.8);
-    camera.lookAt(0, 0.5, -24);
+    // desktop landscape gets the hero framing; narrow/portrait pulls back so the
+    // car doesn't swallow the frame
+    const placeCamera = (aspect: number) => {
+      const k = aspect >= 1 ? 1 : 1 + (1 - aspect) * 1.1;
+      camera.setPosition(0, 1.7 + (k - 1) * 0.75, CAR_Z + 5.8 * k);
+      camera.lookAt(0, 0.35, -3);
+    };
+    placeCamera(1.5);
     app.root.addChild(camera);
 
     const sun = new pc.Entity('sun');
@@ -187,11 +197,12 @@ export default function PlayCanvasRideScene({
     const heightAt = createTerrain(app, theme, road);
     createRoad(app, moving, theme);
     createThemeWorld(app, moving, drifters, bobbers, theme, road, heightAt);
-    createRideCapsule(camera, driverColorRef.current, passengerColorRef.current, gestures);
+    const carRig = createCar(app, driverColorRef.current, passengerColorRef.current, gestures);
 
     const resize = () => {
       const rect = mount.getBoundingClientRect();
       app.resizeCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
+      placeCamera(rect.width / Math.max(1, rect.height));
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
@@ -202,12 +213,14 @@ export default function PlayCanvasRideScene({
       elapsed += dt;
       const offset = positionRef.current * WORLD_SPEED;
 
+      // world streams toward -z: ground passes the car front-to-back, as seen
+      // from a camera retreating ahead of a forward-driving car
       for (const item of moving) {
-        item.entity.setLocalPosition(item.x, item.y, -FAR + positiveMod(item.base + offset, FAR));
+        item.entity.setLocalPosition(item.x, item.y, -FAR + WRAP_AHEAD + positiveMod(item.base - offset, FAR));
       }
 
       // terrain tiles leapfrog so a seam never enters view
-      const a = positiveMod(offset, FAR);
+      const a = positiveMod(-offset, FAR) + CELL;
       terrainTiles.forEach((tile, i) => tile.setLocalPosition(0, 0, a - i * FAR));
 
       for (const c of drifters) {
@@ -221,9 +234,9 @@ export default function PlayCanvasRideScene({
         b.entity.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.1 + b.phase) * 3);
       }
 
-      const sway = Math.sin(positionRef.current * 2.2) * 0.015;
-      camera.setLocalPosition(sway, 1.12 + Math.sin(positionRef.current * 4.1) * 0.006, 2.8);
-      camera.lookAt(sway * 0.6, 0.5, -24);
+      // the camera stays locked; the car gets the life — gentle bob and roll
+      carRig.setLocalPosition(Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
+      carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
 
       updateCapsuleGestures(gestures, driverGestureRef.current, passengerGestureRef.current);
 
@@ -412,7 +425,11 @@ function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightF
     const p = profile(side, x);
     let ci = 0;
     for (let c = 0; c < colEdges.length - 1; c++) if (x >= colEdges[c]) ci = c;
-    return p.base + jitter[((row % ROWS) + ROWS) % ROWS][ci] * p.amp;
+    const r = ((row % ROWS) + ROWS) % ROWS;
+    // interpolate jitter across the column so props sit on the actual slope
+    const t = Math.min(1, Math.max(0, (x - colEdges[ci]) / (colEdges[ci + 1] - colEdges[ci])));
+    const j = jitter[r][ci] * (1 - t) + jitter[r][Math.min(ci + 1, colEdges.length - 1)] * t;
+    return p.base + j * p.amp;
   };
 
   for (let tileIdx = 0; tileIdx < 2; tileIdx++) {
@@ -806,38 +823,69 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
   addBox(app, 'walk-r', [2.95, -0.585, -FAR / 2 + 8], [1.3, 0.08, FAR + 24], mat(0x20222c, 0));
 }
 
-// ---------------------------------------------------------------- ride capsule (cockpit)
+// ---------------------------------------------------------------- the hero car
 
-function createRideCapsule(
-  camera: pc.Entity,
+function createCar(
+  app: pc.Application,
   driverColor: string,
   passengerColor: string,
   gestures: pc.Entity[],
-) {
-  const darkMat = mat(0x0a0c13, 0.04);
-  const trimMat = mat(0x181c28, 0.08);
-  const seatMat = mat(0x12151f, 0.05);
-  const glassMat = glowMat(0x87c7ff, 0.05);
+): pc.Entity {
+  const rig = new pc.Entity('car-rig');
+  rig.setLocalPosition(0, 0, CAR_Z);
+  app.root.addChild(rig);
 
-  const capsule = new pc.Entity('ride-capsule');
-  camera.addChild(capsule);
+  // occupants are placed synchronously so they exist even while the GLB streams in.
+  // they face +z (toward the camera); car cabin sits just behind the car's centre.
+  // the model is RHD (wheel on the car's right = viewer's left), so the driver sits there
+  const driver = createOccupant(rig, 'driver', [0, 0, 0], driverColor, gestures, 'man');
+  driver.setLocalPosition(-0.3, 0.28, -0.3);
+  driver.setLocalEulerAngles(0, 180, 0);
+  const passenger = createOccupant(rig, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman');
+  passenger.setLocalPosition(0.3, 0.28, -0.3);
+  passenger.setLocalEulerAngles(0, 180, 0);
 
-  // sized for portrait phone: visible half-width at depth d ≈ 0.45·d, half-height ≈ 0.675·d
-  // thin roof band across the top
-  child(capsule, 'box', [0, 0.94, -1.4], [3.6, 0.32, 0.2], darkMat);
-  // a-pillars at the screen edges
-  child(capsule, 'box', [-0.6, 0.1, -1.4], [0.09, 2.0, 0.09], darkMat).setLocalEulerAngles(0, 0, -5);
-  child(capsule, 'box', [0.6, 0.1, -1.4], [0.09, 2.0, 0.09], darkMat).setLocalEulerAngles(0, 0, 5);
-  // rear-view mirror hanging from the roof
-  child(capsule, 'box', [0, 0.72, -1.42], [0.035, 0.1, 0.02], darkMat);
-  child(capsule, 'box', [0, 0.65, -1.42], [0.2, 0.06, 0.03], darkMat);
-  child(capsule, 'box', [0, 0.65, -1.405], [0.17, 0.042, 0.005], glassMat);
-  // low dashboard strip
-  child(capsule, 'box', [0, -0.92, -1.3], [3.6, 0.34, 0.5], trimMat);
-  child(capsule, 'box', [0, -0.74, -1.34], [3.6, 0.05, 0.36], seatMat);
+  // soft fake contact shadow (static — doesn't bob with the rig)
+  const shadowM = new pc.StandardMaterial();
+  shadowM.diffuse = new pc.Color(0, 0, 0);
+  shadowM.emissive = new pc.Color(0, 0, 0);
+  shadowM.useLighting = false;
+  shadowM.opacity = 0.2;
+  shadowM.blendType = pc.BLEND_NORMAL;
+  shadowM.depthWrite = false;
+  shadowM.update();
+  const shadow = primitive('car-shadow', 'sphere', [0, ROAD_TOP + 0.006, CAR_Z], [1.9, 0.01, 3.5], shadowM);
+  app.root.addChild(shadow);
 
-  createOccupant(capsule, 'driver', [-0.38, -0.78, -1.6], driverColor, gestures, 'man');
-  createOccupant(capsule, 'passenger', [0.38, -0.78, -1.6], passengerColor, gestures, 'woman');
+  const asset = new pc.Asset('cicada_flat', 'container', { url: '/assets/cars/cicada_flat.glb' });
+  asset.on('load', () => {
+    // wrapper carries our yaw/scale; the GLB root keeps its own orientation fix
+    const holder = new pc.Entity('car-holder');
+    holder.setLocalEulerAngles(0, -90, 0); // model forward is +x; face the camera (+z)
+    rig.addChild(holder);
+    const model = (asset.resource as pc.ContainerResource).instantiateRenderEntity();
+    holder.addChild(model);
+    // measure world bounds, then scale about the holder origin to track width
+    // and drop the wheels onto the road surface
+    const aabb = new pc.BoundingBox();
+    let first = true;
+    for (const render of holder.findComponents('render') as pc.RenderComponent[]) {
+      for (const mi of render.meshInstances) {
+        if (first) { aabb.copy(mi.aabb); first = false; }
+        else aabb.add(mi.aabb);
+      }
+    }
+    const center = aabb.center.clone();
+    const min = aabb.getMin().clone();
+    const s = 1.9 / (aabb.halfExtents.x * 2);
+    holder.setLocalScale(s, s, s);
+    holder.setLocalPosition(-center.x * s, ROAD_TOP - min.y * s, -(center.z - CAR_Z) * s);
+  });
+  asset.on('error', (err: string) => console.error('car glb failed:', err));
+  app.assets.add(asset);
+  app.assets.load(asset);
+
+  return rig;
 }
 
 // Human silhouettes seen from the back seat. The rider's glyph colour lives in
@@ -849,7 +897,7 @@ function createOccupant(
   colorHex: string,
   gestures: pc.Entity[],
   variant: 'man' | 'woman',
-) {
+): pc.Entity {
   const clothes = mat(colorToNumber(colorHex), 0.2);
   const skin = mat(variant === 'man' ? 0xc08a5e : 0xd2a072, 0.08);
   const hair = mat(variant === 'man' ? 0x4a3526 : 0x7a5230, 0.04);
@@ -896,6 +944,7 @@ function createOccupant(
   hand.enabled = false;
 
   gestures.push(figure, head, hand);
+  return figure;
 }
 
 function updateCapsuleGestures(gestures: pc.Entity[], driverGesture?: GestureKind | null, passengerGesture?: GestureKind | null) {
