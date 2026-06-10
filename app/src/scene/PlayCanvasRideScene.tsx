@@ -1,3 +1,7 @@
+// Low-poly flat-shaded ride scene — the default player renderer.
+// Art direction: gradient sky dome, faceted terrain, composed theme props,
+// fog that melts into the horizon. Alto's-Odyssey-adjacent, not Minecraft-literal.
+
 import { useEffect, useRef } from 'react';
 import * as pc from 'playcanvas';
 import type { GestureKind } from '@roadie/shared';
@@ -13,73 +17,92 @@ type Props = {
   firework?: { synced: boolean } | null;
 };
 
+const FAR = 234;          // world tile length (z)
+const CELL = 6;           // terrain row length
+const ROWS = FAR / CELL;  // 39
+const WORLD_SPEED = 7;
+
 type Theme = {
-  sky: number;
+  skyTop: number;
+  skyBand: number;
+  skyHorizon: number;
   fog: number;
+  fogStart: number;
+  fogEnd: number;
+  ambient: number;
+  ambientIntensity: number;
+  sun: { color: number; intensity: number; euler: [number, number] };
+  fill: { color: number; intensity: number; euler: [number, number] };
+  disc?: { color: number; glow: number; x: number; y: number; scale: number; glowO: number; haloO: number };
+  stars: number;
+  clouds: { count: number; color: number };
   road: number;
   lane: number;
+  edge: number;
   shoulder: number;
   ground: number;
-  accent: number;
-  accent2: number;
-  light: number;
+  groundAlt: number;
+  backdrop: { style: 'mesa' | 'ridge' | 'peaks' | 'skyline'; near: number; far: number };
 };
-
-type MovingEntity = {
-  entity: pc.Entity;
-  base: number;
-  side?: -1 | 1;
-};
-
-const FAR = 170;
-const WORLD_SPEED = 6.2;
 
 const THEMES: Record<RoadId, Theme> = {
   desert: {
-    sky: 0x241643,
-    fog: 0xf48b5f,
-    road: 0x302b2a,
-    lane: 0xf4d35e,
-    shoulder: 0x6f492c,
-    ground: 0xb8733a,
-    accent: 0x2f6f46,
-    accent2: 0xcf7d3f,
-    light: 0xffc77a,
+    skyTop: 0x2a1e5c, skyBand: 0xd96a4e, skyHorizon: 0xffa05a,
+    fog: 0xdf7a50, fogStart: 60, fogEnd: 215,
+    ambient: 0x9a6a80, ambientIntensity: 0.6,
+    sun: { color: 0xffb066, intensity: 1.7, euler: [14, -42] },
+    fill: { color: 0x6a5aa0, intensity: 0.5, euler: [40, 140] },
+    disc: { color: 0xffae54, glow: 0xff7b3a, x: -34, y: 13, scale: 9, glowO: 0.08, haloO: 0.05 },
+    stars: 50,
+    clouds: { count: 4, color: 0xea9a78 },
+    road: 0x3a3136, lane: 0xf4c95d, edge: 0xd9d3c8, shoulder: 0x7a5234,
+    ground: 0xc1773c, groundAlt: 0xb06a34,
+    backdrop: { style: 'mesa', near: 0x96503a, far: 0xb5654a },
   },
   coast: {
-    sky: 0x7fc8df,
-    fog: 0xffd88f,
-    road: 0x34383c,
-    lane: 0xf6f7f2,
-    shoulder: 0x456d4d,
-    ground: 0x6b8d56,
-    accent: 0x146f8d,
-    accent2: 0xd6b07a,
-    light: 0xffe1a8,
+    skyTop: 0x3f8fd2, skyBand: 0xa8dcea, skyHorizon: 0xeef7e8,
+    fog: 0xcfe8e6, fogStart: 75, fogEnd: 225,
+    ambient: 0x9fc3d0, ambientIntensity: 0.62,
+    sun: { color: 0xfff2cf, intensity: 1.9, euler: [42, 28] },
+    fill: { color: 0x6f9fc0, intensity: 0.45, euler: [35, -140] },
+    disc: { color: 0xfff8e0, glow: 0xfff3c4, x: 42, y: 58, scale: 5.5, glowO: 0.05, haloO: 0 },
+    stars: 0,
+    clouds: { count: 7, color: 0xfbfdfd },
+    road: 0x3b4046, lane: 0xf6f7f2, edge: 0xe8e2d2, shoulder: 0x8a6a45,
+    ground: 0x6f9a4e, groundAlt: 0x638b46,
+    backdrop: { style: 'ridge', near: 0x88aa9a, far: 0xa5c4c2 },
   },
   mountain: {
-    sky: 0x223656,
-    fog: 0x7fa0c8,
-    road: 0x2d3034,
-    lane: 0xe8edf2,
-    shoulder: 0x263f31,
-    ground: 0x3d5b42,
-    accent: 0x123021,
-    accent2: 0xaab8c4,
-    light: 0xdcecff,
+    skyTop: 0x35597f, skyBand: 0x9dbdd2, skyHorizon: 0xe4eef2,
+    fog: 0xb9cdd9, fogStart: 42, fogEnd: 205,
+    ambient: 0x9fb4c6, ambientIntensity: 0.6,
+    sun: { color: 0xeef4ff, intensity: 1.6, euler: [38, -32] },
+    fill: { color: 0x5a7a9a, intensity: 0.45, euler: [40, 150] },
+    disc: { color: 0xf6fafc, glow: 0xdceaf2, x: -38, y: 52, scale: 4.5, glowO: 0.05, haloO: 0 },
+    stars: 0,
+    clouds: { count: 6, color: 0xe8f0f4 },
+    road: 0x2f3338, lane: 0xe8edf2, edge: 0xc8d0d6, shoulder: 0x4f463c,
+    ground: 0x4c7050, groundAlt: 0x426347,
+    backdrop: { style: 'peaks', near: 0x7e93a8, far: 0x9fb6c8 },
   },
   city: {
-    sky: 0x090a16,
-    fog: 0x20133c,
-    road: 0x121218,
-    lane: 0x6f77ff,
-    shoulder: 0x171821,
-    ground: 0x101016,
-    accent: 0xffc766,
-    accent2: 0x54d6e3,
-    light: 0xc8dcff,
+    skyTop: 0x070914, skyBand: 0x2c1a44, skyHorizon: 0x5c2c54,
+    fog: 0x241836, fogStart: 36, fogEnd: 190,
+    ambient: 0x4e4a6a, ambientIntensity: 0.55,
+    sun: { color: 0xa9c0e8, intensity: 0.75, euler: [48, 32] },
+    fill: { color: 0xff9a5e, intensity: 0.3, euler: [20, -120] },
+    disc: { color: 0xe8ecf2, glow: 0x8a92b8, x: -30, y: 56, scale: 5, glowO: 0.08, haloO: 0.04 },
+    stars: 90,
+    clouds: { count: 0, color: 0 },
+    road: 0x16161d, lane: 0xf2c14e, edge: 0x3c3e52, shoulder: 0x20222c,
+    ground: 0x14151d, groundAlt: 0x121219,
+    backdrop: { style: 'skyline', near: 0x16142a, far: 0x251c40 },
   },
 };
+
+type MovingEntity = { entity: pc.Entity; base: number; x: number; y: number };
+type Drifter = { entity: pc.Entity; x: number; y: number; z: number; speed: number };
+type Bobber = { entity: pc.Entity; x: number; y: number; phase: number; amp: number };
 
 export default function PlayCanvasRideScene({
   road,
@@ -125,52 +148,46 @@ export default function PlayCanvasRideScene({
     app.setCanvasFillMode(pc.FILLMODE_NONE);
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
     app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio, 1.75);
-    app.scene.ambientLight = color(theme.light, 0.42);
+    app.scene.ambientLight = color(theme.ambient, theme.ambientIntensity);
     app.scene.fog.type = pc.FOG_LINEAR;
     app.scene.fog.color = color(theme.fog, 1);
-    app.scene.fog.start = 34;
-    app.scene.fog.end = FAR;
+    app.scene.fog.start = theme.fogStart;
+    app.scene.fog.end = theme.fogEnd;
 
     const camera = new pc.Entity('camera');
     camera.addComponent('camera', {
-      clearColor: color(theme.sky, 1),
+      clearColor: color(theme.skyTop, 1),
       fov: 68,
       nearClip: 0.03,
-      farClip: FAR + 20,
+      farClip: 420,
     });
-    camera.setPosition(0, 1.08, 2.8);
-    camera.lookAt(0, 0.42, -20);
+    camera.setPosition(0, 1.12, 2.8);
+    camera.lookAt(0, 0.5, -24);
     app.root.addChild(camera);
 
-    const key = new pc.Entity('key-light');
-    key.addComponent('light', {
-      type: 'directional',
-      color: color(theme.light, 1),
-      intensity: road === 'city' ? 1.2 : 2.2,
-      castShadows: false,
-    });
-    key.setEulerAngles(45, -35, 0);
-    app.root.addChild(key);
+    const sun = new pc.Entity('sun');
+    sun.addComponent('light', { type: 'directional', color: color(theme.sun.color, 1), intensity: theme.sun.intensity, castShadows: false });
+    sun.setEulerAngles(theme.sun.euler[0], theme.sun.euler[1], 0);
+    app.root.addChild(sun);
 
-    const roadMat = mat(theme.road, road === 'city' ? 0.15 : 0.45);
-    const laneMat = mat(theme.lane, road === 'city' ? 1.0 : 0.2);
-    const shoulderMat = mat(theme.shoulder, 0.28);
-    const groundMat = mat(theme.ground, 0.34);
-    const accentMat = mat(theme.accent, road === 'city' ? 0.8 : 0.18);
-    const accent2Mat = mat(theme.accent2, road === 'city' ? 0.8 : 0.2);
-    const darkMat = mat(0x080a11, 0.12);
-    const trimMat = mat(0x161a24, 0.18);
-    const glassMat = mat(0x87c7ff, 0.15, 0.18);
+    const fill = new pc.Entity('fill');
+    fill.addComponent('light', { type: 'directional', color: color(theme.fill.color, 1), intensity: theme.fill.intensity, castShadows: false });
+    fill.setEulerAngles(theme.fill.euler[0], theme.fill.euler[1], 0);
+    app.root.addChild(fill);
 
     const moving: MovingEntity[] = [];
+    const drifters: Drifter[] = [];
+    const bobbers: Bobber[] = [];
     const gestures: pc.Entity[] = [];
     const fireworks: { entity: pc.Entity; vel: pc.Vec3; life: number }[] = [];
     let lastFirework = fireworkRef.current;
 
-    createGround(app, groundMat, accentMat, road);
-    createRoad(app, moving, roadMat, laneMat, shoulderMat);
-    createThemeProps(app, moving, road, accentMat, accent2Mat, groundMat);
-    createRideCapsule(app, camera, darkMat, trimMat, glassMat, driverColorRef.current, passengerColorRef.current, gestures);
+    createSky(app, theme);
+    createBackdrop(app, theme, road);
+    const heightAt = createTerrain(app, theme, road);
+    createRoad(app, moving, theme);
+    createThemeWorld(app, moving, drifters, bobbers, theme, road, heightAt);
+    createRideCapsule(camera, driverColorRef.current, passengerColorRef.current, gestures);
 
     const resize = () => {
       const rect = mount.getBoundingClientRect();
@@ -180,16 +197,33 @@ export default function PlayCanvasRideScene({
     observer.observe(mount);
     resize();
 
+    let elapsed = 0;
     app.on('update', (dt: number) => {
+      elapsed += dt;
       const offset = positionRef.current * WORLD_SPEED;
+
       for (const item of moving) {
-        const z = -FAR + positiveMod(item.base + offset, FAR);
-        item.entity.setLocalPosition(item.entity.getLocalPosition().x, item.entity.getLocalPosition().y, z);
+        item.entity.setLocalPosition(item.x, item.y, -FAR + positiveMod(item.base + offset, FAR));
+      }
+
+      // terrain tiles leapfrog so a seam never enters view
+      const a = positiveMod(offset, FAR);
+      terrainTiles.forEach((tile, i) => tile.setLocalPosition(0, 0, a - i * FAR));
+
+      for (const c of drifters) {
+        c.x += c.speed * dt;
+        if (c.x > 130) c.x = -130;
+        c.entity.setLocalPosition(c.x, c.y, c.z);
+      }
+      for (const b of bobbers) {
+        const pos = b.entity.getLocalPosition();
+        b.entity.setLocalPosition(pos.x, b.y + Math.sin(elapsed * 1.4 + b.phase) * b.amp, pos.z);
+        b.entity.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.1 + b.phase) * 3);
       }
 
       const sway = Math.sin(positionRef.current * 2.2) * 0.015;
-      camera.setLocalPosition(sway, 1.08 + Math.sin(positionRef.current * 4.1) * 0.006, 2.8);
-      camera.lookAt(sway * 0.6, 0.42, -20);
+      camera.setLocalPosition(sway, 1.12 + Math.sin(positionRef.current * 4.1) * 0.006, 2.8);
+      camera.lookAt(sway * 0.6, 0.5, -24);
 
       updateCapsuleGestures(gestures, driverGestureRef.current, passengerGestureRef.current);
 
@@ -201,10 +235,10 @@ export default function PlayCanvasRideScene({
       for (let i = fireworks.length - 1; i >= 0; i--) {
         const p = fireworks[i];
         const pos = p.entity.getPosition();
-        p.vel.y -= dt * 1.2;
+        p.vel.y -= dt * 1.4;
         p.entity.setPosition(pos.x + p.vel.x * dt, pos.y + p.vel.y * dt, pos.z + p.vel.z * dt);
         p.life -= dt;
-        const s = Math.max(0.01, p.life * 0.08);
+        const s = Math.max(0.01, p.life * 0.1);
         p.entity.setLocalScale(s, s, s);
         if (p.life <= 0) {
           p.entity.destroy();
@@ -212,6 +246,9 @@ export default function PlayCanvasRideScene({
         }
       }
     });
+
+    // terrain tiles are created inside createTerrain; grab them by name
+    const terrainTiles = [app.root.findByName('terrain-0') as pc.Entity, app.root.findByName('terrain-1') as pc.Entity].filter(Boolean);
 
     app.start();
 
@@ -225,104 +262,592 @@ export default function PlayCanvasRideScene({
   return <div ref={mountRef} className="absolute inset-0" />;
 }
 
-function createGround(app: pc.Application, groundMat: pc.Material, accentMat: pc.Material, road: RoadId) {
-  box(app, 'ground-left', [-9, -0.7, -75], [16, 0.08, FAR], groundMat);
-  box(app, 'ground-right', [9, -0.7, -75], [16, 0.08, FAR], groundMat);
+// ---------------------------------------------------------------- sky
 
-  if (road === 'coast') {
-    const ocean = box(app, 'ocean', [8.5, -0.64, -78], [12, 0.06, FAR], accentMat);
-    ocean.setEulerAngles(0, 0, 0);
+function createSky(app: pc.Application, theme: Theme) {
+  // gradient dome via vertex colors, unlit + unfogged
+  const b = new MeshBuilder();
+  const RAD = 320;
+  const rings = 14;
+  const segs = 28;
+  const latMin = -0.06;
+  const latMax = Math.PI / 2;
+  const vert = (ri: number, si: number): [number, number, number] => {
+    const lat = latMin + (latMax - latMin) * (ri / rings);
+    const lon = (Math.PI * 2 * si) / segs;
+    return [Math.cos(lat) * Math.cos(lon) * RAD, Math.sin(lat) * RAD, Math.cos(lat) * Math.sin(lon) * RAD];
+  };
+  const colAt = (ri: number): number => {
+    const lat = latMin + (latMax - latMin) * (ri / rings);
+    const t = Math.max(0, Math.sin(lat));
+    // horizon → band over the first 18%, band → top over the rest
+    if (t < 0.16) return lerpColor(theme.skyHorizon, theme.skyBand, t / 0.16);
+    return lerpColor(theme.skyBand, theme.skyTop, Math.pow((t - 0.16) / 0.84, 0.75));
+  };
+  for (let ri = 0; ri < rings; ri++) {
+    for (let si = 0; si < segs; si++) {
+      const p00 = vert(ri, si), p10 = vert(ri, si + 1), p01 = vert(ri + 1, si), p11 = vert(ri + 1, si + 1);
+      b.quadColors(p00, p10, p11, p01, colAt(ri), colAt(ri), colAt(ri + 1), colAt(ri + 1));
+    }
+  }
+  const dome = b.entity(app, 'sky', unlitVCMat());
+  app.root.addChild(dome);
+
+  if (theme.disc) {
+    const d = theme.disc;
+    const disc = primitive('sun-disc', 'sphere', [d.x, d.y, -210], [d.scale, d.scale, 0.6], unlitMat(d.color));
+    app.root.addChild(disc);
+    if (d.glowO > 0) {
+      const glow = primitive('sun-glow', 'sphere', [d.x, d.y, -212], [d.scale * 2.4, d.scale * 2.4, 0.4], glowMat(d.glow, d.glowO));
+      app.root.addChild(glow);
+    }
+    if (d.haloO > 0) {
+      const halo = primitive('sun-halo', 'sphere', [d.x, d.y, -214], [d.scale * 5, d.scale * 5, 0.3], glowMat(d.glow, d.haloO));
+      app.root.addChild(halo);
+    }
+  }
+
+  if (theme.stars > 0) {
+    const sb = new MeshBuilder();
+    const rng = makeRng(7);
+    for (let i = 0; i < theme.stars; i++) {
+      const lat = 0.12 + rng() * 1.3;
+      const lon = rng() * Math.PI * 2;
+      const r = 300;
+      const cx = Math.cos(lat) * Math.cos(lon) * r;
+      const cy = Math.sin(lat) * r;
+      const cz = Math.cos(lat) * Math.sin(lon) * r;
+      const s = 0.5 + rng() * 0.9;
+      const bright = 0.35 + rng() * 0.65;
+      const c = lerpColor(0x000000, rng() > 0.85 ? 0xffe2b8 : 0xe8f0ff, bright);
+      // small tangent quad
+      const up: [number, number, number] = [0, 1, 0];
+      const dir: [number, number, number] = [cx / r, cy / r, cz / r];
+      const u = norm3(cross3(dir, up));
+      const v = cross3(u, dir);
+      sb.quadColors(
+        [cx - u[0] * s - v[0] * s, cy - u[1] * s - v[1] * s, cz - u[2] * s - v[2] * s],
+        [cx + u[0] * s - v[0] * s, cy + u[1] * s - v[1] * s, cz + u[2] * s - v[2] * s],
+        [cx + u[0] * s + v[0] * s, cy + u[1] * s + v[1] * s, cz + u[2] * s + v[2] * s],
+        [cx - u[0] * s + v[0] * s, cy - u[1] * s + v[1] * s, cz - u[2] * s + v[2] * s],
+        c, c, c, c,
+      );
+    }
+    const stars = sb.entity(app, 'stars', unlitVCMat());
+    app.root.addChild(stars);
   }
 }
 
-function createRoad(
-  app: pc.Application,
-  moving: MovingEntity[],
-  roadMat: pc.Material,
-  laneMat: pc.Material,
-  shoulderMat: pc.Material,
-) {
-  const segmentCount = 38;
-  const gap = FAR / segmentCount;
-  for (let i = 0; i < segmentCount; i++) {
-    const base = i * gap;
-    moving.push({ entity: box(app, `road-${i}`, [0, -0.62, -FAR + base], [3.2, 0.05, gap + 0.18], roadMat), base });
-    moving.push({ entity: box(app, `shoulder-l-${i}`, [-2.1, -0.615, -FAR + base], [0.9, 0.035, gap + 0.18], shoulderMat), base });
-    moving.push({ entity: box(app, `shoulder-r-${i}`, [2.1, -0.615, -FAR + base], [0.9, 0.035, gap + 0.18], shoulderMat), base });
-  }
+// ---------------------------------------------------------------- backdrop silhouettes
 
-  for (let i = 0; i < 22; i++) {
-    const base = i * 7.6;
-    moving.push({ entity: box(app, `lane-${i}`, [0, -0.57, -FAR + base], [0.08, 0.04, 2.1], laneMat), base });
-  }
-}
-
-function createThemeProps(
-  app: pc.Application,
-  moving: MovingEntity[],
-  road: RoadId,
-  accentMat: pc.Material,
-  accent2Mat: pc.Material,
-  groundMat: pc.Material,
-) {
-  for (let i = 0; i < 34; i++) {
-    const base = i * 5.3;
-    const side = i % 2 === 0 ? -1 : 1;
-    const x = side * (3.2 + ((i * 13) % 4) * 0.45);
-
-    if (road === 'city') {
-      const h = 1.2 + ((i * 17) % 7) * 0.42;
-      const b = box(app, `building-${i}`, [x + side * 0.8, -0.7 + h / 2, -FAR + base], [1.1 + (i % 3) * 0.4, h, 1.4], i % 3 === 0 ? accent2Mat : groundMat);
-      moving.push({ entity: b, base, side });
-      if (i % 2 === 0) moving.push({ entity: box(app, `lamp-${i}`, [side * 2.75, 0.1, -FAR + base + 1.2], [0.08, 1.4, 0.08], accentMat), base: base + 1.2, side });
-    } else if (road === 'mountain') {
-      const trunk = box(app, `pine-trunk-${i}`, [x, -0.15, -FAR + base], [0.13, 0.85, 0.13], groundMat);
-      const crown = cone(app, `pine-${i}`, [x, 0.55, -FAR + base], [0.75, 1.25, 0.75], accentMat, 7);
-      moving.push({ entity: trunk, base, side }, { entity: crown, base, side });
-      if (i % 6 === 0) moving.push({ entity: cone(app, `peak-${i}`, [side * 7, 1.1, -FAR + base - 12], [3.2, 4.4, 3.2], accent2Mat, 5), base: base - 12, side });
-    } else if (road === 'coast') {
-      if (side < 0) {
-        moving.push({ entity: box(app, `cliff-${i}`, [x - 0.8, -0.25, -FAR + base], [1.2, 0.9, 1.4], accent2Mat), base, side });
-      } else {
-        moving.push({ entity: box(app, `post-${i}`, [x, -0.25, -FAR + base], [0.16, 0.75, 0.16], accentMat), base, side });
+function createBackdrop(app: pc.Application, theme: Theme, road: RoadId) {
+  const make = (z: number, col: number, tall: number, seed: number) => {
+    const b = new MeshBuilder();
+    const rng = makeRng(seed);
+    const baseY = -2;
+    if (theme.backdrop.style === 'skyline') {
+      let x = -170;
+      while (x < 170) {
+        const w = 6 + rng() * 14;
+        const h = 4 + rng() * tall;
+        b.quad([x, baseY, z], [x + w, baseY, z], [x + w, baseY + h, z], [x, baseY + h, z], col);
+        x += w + rng() * 3;
       }
     } else {
-      const trunk = cylinder(app, `cactus-trunk-${i}`, [x, 0.0, -FAR + base], [0.15, 0.95, 0.15], accentMat);
-      moving.push({ entity: trunk, base, side });
-      if (i % 3 === 0) moving.push({ entity: box(app, `mesa-${i}`, [side * 7.5, 0.15, -FAR + base - 8], [2.6, 0.8, 2.4], accent2Mat), base: base - 8, side });
+      // jagged ridge / mesa / peaks strip
+      const step = theme.backdrop.style === 'mesa' ? 22 : 14;
+      let x = -180;
+      let prevY = baseY + 3 + rng() * tall;
+      while (x < 180) {
+        const w = step * (0.7 + rng() * 0.6);
+        const y = theme.backdrop.style === 'mesa'
+          ? baseY + 4 + rng() * tall * 0.5
+          : baseY + 2 + rng() * tall;
+        if (theme.backdrop.style === 'mesa') {
+          // flat-topped trapezoid
+          b.quad([x, baseY, z], [x + w, baseY, z], [x + w * 0.8, y, z], [x + w * 0.2, y, z], col);
+        } else {
+          b.tri([x, baseY, z], [x + w, baseY, z], [x + w / 2, y, z], col);
+          b.tri([x - w * 0.3, baseY, z], [x + w * 0.6, baseY, z], [x + w * 0.15, (prevY + y) / 2, z], col);
+        }
+        prevY = y;
+        x += w * (theme.backdrop.style === 'mesa' ? 1.4 : 0.7);
+      }
+    }
+    const e = b.entity(app, `backdrop-${z}`, unlitVCMat());
+    app.root.addChild(e);
+  };
+
+  make(-226, theme.backdrop.far, road === 'mountain' ? 26 : road === 'city' ? 16 : 12, 11);
+  make(-214, theme.backdrop.near, road === 'mountain' ? 18 : road === 'city' ? 10 : 8, 23);
+}
+
+// ---------------------------------------------------------------- terrain
+
+type HeightFn = (side: -1 | 1, x: number, row: number) => number;
+
+function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightFn {
+  const colEdges = [2.3, 3.2, 4.4, 6, 8, 10.5, 14, 18, 24, 32, 42, 56];
+  const rng = makeRng(road.length * 101 + 5);
+
+  // per-vertex jitter grid, periodic in z (row ROWS == row 0)
+  const jitter: number[][] = [];
+  for (let r = 0; r <= ROWS; r++) {
+    jitter.push(colEdges.map(() => (r === ROWS ? 0 : rng() - 0.5)));
+  }
+  for (let c = 0; c < colEdges.length; c++) jitter[ROWS][c] = jitter[0][c];
+
+  const profile = (side: -1 | 1, x: number): { base: number; amp: number } => {
+    const d = Math.max(0, x - 2.3);
+    if (road === 'desert') return { base: -0.62 + Math.max(0, d - 5) * 0.02, amp: Math.min(0.7, d * 0.05) };
+    if (road === 'mountain') return { base: -0.62 + d * 0.14, amp: Math.min(1.4, 0.2 + d * 0.06) };
+    if (road === 'city') return { base: -0.62, amp: 0 };
+    // coast: hills on the left, cliff drop to the ocean on the right
+    if (side < 0) return { base: -0.62 + d * 0.1, amp: Math.min(1.0, 0.2 + d * 0.04) };
+    if (d < 2.2) return { base: -0.62, amp: 0.04 };
+    return { base: -0.62 - Math.min(2.4, (d - 2.2) * 1.1), amp: 0.12 };
+  };
+
+  const heightAt: HeightFn = (side, x, row) => {
+    const p = profile(side, x);
+    let ci = 0;
+    for (let c = 0; c < colEdges.length - 1; c++) if (x >= colEdges[c]) ci = c;
+    return p.base + jitter[((row % ROWS) + ROWS) % ROWS][ci] * p.amp;
+  };
+
+  for (let tileIdx = 0; tileIdx < 2; tileIdx++) {
+    // identical rng stream per tile so the two copies tile seamlessly
+    const colorRng = makeRng(road.length * 77 + 3);
+    const b = new MeshBuilder();
+    for (const side of [-1, 1] as const) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < colEdges.length - 1; c++) {
+          const x0 = colEdges[c] * side, x1 = colEdges[c + 1] * side;
+          const z0 = -r * CELL, z1 = -(r + 1) * CELL;
+          const y00 = heightAt(side, colEdges[c], r);
+          const y10 = heightAt(side, colEdges[c + 1], r);
+          const y01 = heightAt(side, colEdges[c], r + 1);
+          const y11 = heightAt(side, colEdges[c + 1], r + 1);
+          let col = lerpColor(theme.ground, theme.groundAlt, colorRng());
+          if (road === 'coast' && side > 0 && colEdges[c] > 4.4) col = lerpColor(0xb08d5e, 0x96714a, colorRng()); // cliff face
+          if (road === 'mountain' && Math.min(y00, y10) > 1.6) col = lerpColor(0x8b97a0, 0xa8b4bc, colorRng()); // rocky above treeline
+          if (road === 'mountain' && Math.min(y00, y10) > 3.4) col = lerpColor(0xdfe8ee, 0xeff5f8, colorRng()); // snow
+          const shade = 0.92 + colorRng() * 0.16;
+          col = scaleColor(col, shade);
+          if (side > 0) b.quad([x0, y00, z0], [x1, y10, z0], [x1, y11, z1], [x0, y01, z1], col);
+          else b.quad([x1, y10, z0], [x0, y00, z0], [x0, y01, z1], [x1, y11, z1], col);
+        }
+      }
+    }
+    const tile = b.entity(app, `terrain-${tileIdx}`, litVCMat());
+    app.root.addChild(tile);
+  }
+
+  if (road === 'coast') {
+    // ocean: static vertex-colored plane, deeper near → pale at horizon
+    const ob = new MeshBuilder();
+    const nearC = 0x1577a0, farC = 0x8ecbd8;
+    const zSteps = 8;
+    for (let i = 0; i < zSteps; i++) {
+      const z0 = 6 - (i * 260) / zSteps;
+      const z1 = 6 - ((i + 1) * 260) / zSteps;
+      const c0 = lerpColor(nearC, farC, i / zSteps);
+      const c1 = lerpColor(nearC, farC, (i + 1) / zSteps);
+      ob.quadColors([5.5, -2.6, z0], [150, -2.6, z0], [150, -2.6, z1], [5.5, -2.6, z1], c0, c0, c1, c1);
+    }
+    const ocean = ob.entity(app, 'ocean', litVCMat());
+    app.root.addChild(ocean);
+  }
+
+  return heightAt;
+}
+
+// ---------------------------------------------------------------- road
+
+function createRoad(app: pc.Application, moving: MovingEntity[], theme: Theme) {
+  const roadMat = mat(theme.road, 0);
+  const laneMat = mat(theme.lane, 0.5);
+  const edgeMat = mat(theme.edge, 0.15);
+  const shoulderMat = mat(theme.shoulder, 0);
+
+  // static: asphalt, edge lines, shoulders (uniform surfaces don't show motion)
+  addBox(app, 'road', [0, -0.6, -FAR / 2 + 8], [3.4, 0.06, FAR + 24], roadMat);
+  addBox(app, 'edge-l', [-1.45, -0.565, -FAR / 2 + 8], [0.09, 0.012, FAR + 24], edgeMat);
+  addBox(app, 'edge-r', [1.45, -0.565, -FAR / 2 + 8], [0.09, 0.012, FAR + 24], edgeMat);
+  addBox(app, 'shoulder-l', [-2.15, -0.605, -FAR / 2 + 8], [1.0, 0.045, FAR + 24], shoulderMat);
+  addBox(app, 'shoulder-r', [2.15, -0.605, -FAR / 2 + 8], [1.0, 0.045, FAR + 24], shoulderMat);
+
+  // scrolling: centre dashes
+  const dashCount = 30;
+  for (let i = 0; i < dashCount; i++) {
+    const e = addBox(app, `lane-${i}`, [0, -0.555, 0], [0.1, 0.012, 2.2], laneMat);
+    moving.push({ entity: e, base: i * (FAR / dashCount), x: 0, y: -0.555 });
+  }
+}
+
+// ---------------------------------------------------------------- theme worlds
+
+function createThemeWorld(
+  app: pc.Application,
+  moving: MovingEntity[],
+  drifters: Drifter[],
+  bobbers: Bobber[],
+  theme: Theme,
+  road: RoadId,
+  heightAt: HeightFn,
+) {
+  const rng = makeRng(road.length * 31 + 17);
+  const groupAt = (side: -1 | 1, x: number, row: number): { g: pc.Entity; reg: () => void } => {
+    const g = new pc.Entity('prop');
+    app.root.addChild(g);
+    const y = heightAt(side, Math.abs(x), row);
+    const base = FAR - ((row % ROWS) + ROWS) % ROWS * CELL;
+    return { g, reg: () => moving.push({ entity: g, base, x, y }) };
+  };
+
+  if (road === 'desert') buildDesert(rng, groupAt);
+  if (road === 'coast') buildCoast(app, moving, bobbers, rng, groupAt);
+  if (road === 'mountain') buildMountain(rng, groupAt);
+  if (road === 'city') buildCity(app, rng, groupAt);
+
+  // clouds
+  if (theme.clouds.count > 0) {
+    const cloudM = unlitMat(theme.clouds.color);
+    for (let i = 0; i < theme.clouds.count; i++) {
+      const cluster = new pc.Entity(`cloud-${i}`);
+      const puffs = 3 + Math.floor(rng() * 3);
+      const w = 9 + rng() * 14;
+      for (let p = 0; p < puffs; p++) {
+        const px = (p / puffs - 0.5) * w;
+        const s = (0.45 + rng() * 0.5) * w * 0.45;
+        const puff = primitive(`puff-${p}`, 'sphere', [px, rng() * 1.2, 0], [s, s * 0.42, s * 0.7], cloudM);
+        cluster.addChild(puff);
+      }
+      const x = -120 + rng() * 240;
+      const y = 26 + rng() * 34;
+      const z = -195 - rng() * 12;
+      cluster.setLocalPosition(x, y, z);
+      app.root.addChild(cluster);
+      drifters.push({ entity: cluster, x, y, z, speed: 0.4 + rng() * 0.5 });
     }
   }
 }
 
+type GroupAt = (side: -1 | 1, x: number, row: number) => { g: pc.Entity; reg: () => void };
+
+function buildDesert(rng: () => number, groupAt: GroupAt) {
+  const cactus = mat(0x3f7350, 0.04);
+  const cactusDark = mat(0x356244, 0.04);
+  const rock = mat(0xc78d56, 0);
+  const bush = mat(0x6a5d33, 0);
+  const pole = mat(0x4a3526, 0);
+  const strata = [mat(0xb5653c, 0), mat(0xc7794a, 0), mat(0xa05633, 0)];
+
+  for (let r = 0; r < ROWS; r += 1) {
+    if (rng() < 0.45) continue;
+    const side = rng() < 0.5 ? -1 : 1;
+    const pick = rng();
+    if (pick < 0.4) {
+      // saguaro
+      const x = side * (4 + rng() * 6);
+      const { g, reg } = groupAt(side, x, r);
+      const h = 1.3 + rng() * 1.1;
+      const m = rng() < 0.7 ? cactus : cactusDark;
+      child(g, 'cylinder', [0, h / 2, 0], [0.26, h, 0.26], m);
+      child(g, 'sphere', [0, h, 0], [0.26, 0.2, 0.26], m);
+      const arms = rng() < 0.6 ? 2 : 1;
+      for (let a = 0; a < arms; a++) {
+        const ax = (a === 0 ? 1 : -1) * 0.34;
+        const ay = h * (0.4 + rng() * 0.25);
+        child(g, 'cylinder', [ax * 0.7, ay, 0], [0.32, 0.16, 0.16], m).setLocalEulerAngles(0, 0, 90);
+        child(g, 'cylinder', [ax, ay + 0.3, 0], [0.17, 0.6, 0.17], m);
+        child(g, 'sphere', [ax, ay + 0.6, 0], [0.17, 0.14, 0.17], m);
+      }
+      reg();
+    } else if (pick < 0.55) {
+      // mesa
+      const x = side * (12 + rng() * 14);
+      const { g, reg } = groupAt(side, x, r);
+      const w = 5 + rng() * 8;
+      const h1 = 1.2 + rng() * 1.4;
+      child(g, 'box', [0, h1 / 2, 0], [w, h1, w * 0.8], strata[Math.floor(rng() * 3)]);
+      child(g, 'box', [0, h1 + 0.5, 0], [w * 0.72, 1, w * 0.6], strata[Math.floor(rng() * 3)]);
+      if (rng() < 0.5) child(g, 'box', [0, h1 + 1.3, 0], [w * 0.5, 0.7, w * 0.42], strata[Math.floor(rng() * 3)]);
+      reg();
+    } else if (pick < 0.8) {
+      // rocks
+      const x = side * (3.4 + rng() * 4);
+      const { g, reg } = groupAt(side, x, r);
+      const s = 0.25 + rng() * 0.5;
+      child(g, 'sphere', [0, s * 0.3, 0], [s * 1.5, s * 0.8, s * 1.2], rock);
+      if (rng() < 0.5) child(g, 'sphere', [s, s * 0.2, 0.2], [s, s * 0.5, s * 0.8], rock);
+      reg();
+    } else {
+      // dry bush
+      const x = side * (3.2 + rng() * 5);
+      const { g, reg } = groupAt(side, x, r);
+      const s = 0.3 + rng() * 0.3;
+      child(g, 'sphere', [0, s * 0.5, 0], [s * 1.4, s, s * 1.3], bush);
+      child(g, 'sphere', [s * 0.8, s * 0.35, 0], [s, s * 0.7, s], bush);
+      reg();
+    }
+  }
+
+  // telephone poles — route 66's metronome
+  for (let r = 0; r < ROWS; r += 3) {
+    const { g, reg } = groupAt(-1, -3.4, r);
+    child(g, 'cylinder', [0, 1.3, 0], [0.09, 2.6, 0.09], pole);
+    child(g, 'box', [0, 2.32, 0], [0.95, 0.07, 0.07], pole);
+    child(g, 'box', [0, 2.05, 0], [0.7, 0.06, 0.06], pole);
+    reg();
+  }
+}
+
+function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber[], rng: () => number, groupAt: GroupAt) {
+  const trunk = mat(0x8a6a4a, 0);
+  const frond = mat(0x3e7d4c, 0.04);
+  const cypress = mat(0x2e5d3c, 0.04);
+  const rock = mat(0x9a8a6e, 0);
+  const post = mat(0xb0a89a, 0.06);
+  const rail = mat(0xc8c2b4, 0.08);
+  const capMat = mat(0xeef7f7, 0.25);
+  const hull = mat(0xf4f2ea, 0.1);
+  const sail = mat(0xffffff, 0.15);
+
+  for (let r = 0; r < ROWS; r += 1) {
+    if (rng() < 0.5) continue;
+    const pick = rng();
+    if (pick < 0.45) {
+      // wind-swept monterey cypress on the hill side
+      const x = -(3.6 + rng() * 6);
+      const { g, reg } = groupAt(-1, x, r);
+      const h = 1.4 + rng() * 1.2;
+      const sweep = 0.25 + rng() * 0.35; // leans toward the sea
+      child(g, 'cylinder', [0, h * 0.3, 0], [0.14, h * 0.6, 0.14], trunk).setLocalEulerAngles(0, 0, -sweep * 24);
+      child(g, 'sphere', [sweep * 0.8, h * 0.72, 0], [h * 0.85, h * 0.34, h * 0.6], frond);
+      child(g, 'sphere', [sweep * 1.4, h * 0.92, 0], [h * 0.55, h * 0.24, h * 0.45], frond);
+      if (rng() < 0.5) child(g, 'sphere', [sweep * 0.2, h * 0.55, 0.2], [h * 0.5, h * 0.2, h * 0.4], frond);
+      reg();
+    } else if (pick < 0.7) {
+      // cypress / shrub
+      const x = -(3.4 + rng() * 8);
+      const { g, reg } = groupAt(-1, x, r);
+      const h = 1.4 + rng() * 1.6;
+      child(g, 'cone', [0, h / 2, 0], [0.5 + rng() * 0.3, h, 0.5 + rng() * 0.3], cypress, 7);
+      reg();
+    } else {
+      // rocks near the cliff edge
+      const x = 3.6 + rng() * 1.2;
+      const { g, reg } = groupAt(1, x, r);
+      const s = 0.2 + rng() * 0.3;
+      child(g, 'sphere', [0, s * 0.3, 0], [s * 1.4, s * 0.8, s * 1.1], rock);
+      reg();
+    }
+  }
+
+  // guardrail on the ocean side: static rail + scrolling posts
+  addBox(app, 'rail', [2.62, -0.18, -FAR / 2 + 8], [0.07, 0.1, FAR + 24], rail);
+  for (let r = 0; r < ROWS; r += 1) {
+    const { g, reg } = groupAt(1, 2.62, r);
+    child(g, 'box', [0, 0.22, 0], [0.1, 0.45, 0.1], post);
+    reg();
+  }
+
+  // whitecaps drifting on the water
+  for (let i = 0; i < 14; i++) {
+    const e = addBox(app, `cap-${i}`, [0, 0, 0], [1.2 + rng() * 2.4, 0.04, 0.16], capMat);
+    moving.push({ entity: e, base: rng() * FAR, x: 8 + rng() * 36, y: -2.54 });
+  }
+
+  // sailboats far out
+  for (let i = 0; i < 3; i++) {
+    const boat = new pc.Entity(`boat-${i}`);
+    child(boat, 'box', [0, 0.1, 0], [1.5, 0.3, 0.5], hull);
+    child(boat, 'cylinder', [0, 1.0, 0], [0.05, 1.6, 0.05], trunk);
+    const s = child(boat, 'cone', [0.35, 1.05, 0], [0.9, 1.5, 0.08], sail, 4);
+    s.setLocalEulerAngles(0, 0, -90);
+    app.root.addChild(boat);
+    const x = 20 + rng() * 26;
+    const y = -2.45;
+    moving.push({ entity: boat, base: rng() * FAR, x, y });
+    bobbers.push({ entity: boat, x, y, phase: rng() * 6, amp: 0.06 });
+  }
+}
+
+function buildMountain(rng: () => number, groupAt: GroupAt) {
+  const trunkM = mat(0x5a4634, 0);
+  const pineA = mat(0x1f4a35, 0.03);
+  const pineB = mat(0x275a3f, 0.03);
+  const snow = mat(0xeff5f8, 0.12);
+  const rockM = mat(0x8b97a0, 0);
+  const peakM = mat(0x7e8c99, 0);
+
+  for (let r = 0; r < ROWS; r += 1) {
+    const side = rng() < 0.5 ? -1 : 1;
+    const pick = rng();
+    if (pick < 0.55) {
+      // pine cluster
+      const n = 1 + Math.floor(rng() * 3);
+      for (let t = 0; t < n; t++) {
+        const x = side * (3.4 + rng() * 7);
+        const { g, reg } = groupAt(side, x, r);
+        const h = 1.2 + rng() * 1.7;
+        const m = rng() < 0.5 ? pineA : pineB;
+        child(g, 'cylinder', [0, h * 0.18, 0], [0.13, h * 0.36, 0.13], trunkM);
+        child(g, 'cone', [0, h * 0.42, 0], [h * 0.55, h * 0.55, h * 0.55], m, 7);
+        child(g, 'cone', [0, h * 0.68, 0], [h * 0.42, h * 0.48, h * 0.42], m, 7);
+        child(g, 'cone', [0, h * 0.92, 0], [h * 0.28, h * 0.4, h * 0.28], m, 7);
+        if (rng() < 0.45) child(g, 'cone', [0, h * 1.06, 0], [h * 0.16, h * 0.18, h * 0.16], snow, 7);
+        reg();
+      }
+    } else if (pick < 0.72) {
+      // boulder
+      const x = side * (3.2 + rng() * 4);
+      const { g, reg } = groupAt(side, x, r);
+      const s = 0.3 + rng() * 0.6;
+      child(g, 'sphere', [0, s * 0.35, 0], [s * 1.5, s * 0.9, s * 1.2], rockM);
+      reg();
+    } else if (pick < 0.86) {
+      // snow patch
+      const x = side * (4 + rng() * 8);
+      const { g, reg } = groupAt(side, x, r);
+      child(g, 'box', [0, 0.03, 0], [1.4 + rng() * 1.6, 0.05, 1 + rng()], snow);
+      reg();
+    } else {
+      // big near peak
+      const x = side * (16 + rng() * 12);
+      const { g, reg } = groupAt(side, x, r);
+      const h = 7 + rng() * 7;
+      child(g, 'cone', [0, h / 2, 0], [h * 0.9, h, h * 0.9], peakM, 5);
+      child(g, 'cone', [0, h * 0.82, 0], [h * 0.34, h * 0.38, h * 0.34], snow, 5);
+      reg();
+    }
+  }
+}
+
+function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
+  const bodyA = mat(0x171a26, 0);
+  const bodyB = mat(0x1d2130, 0);
+  const wood = mat(0x231a18, 0);
+  const roofM = mat(0x2c2330, 0.02);
+  const warm = mat(0xffb45e, 1);
+  const cool = mat(0x7fd8e8, 1);
+  const neonA = mat(0xff5e6c, 1);
+  const neonB = mat(0x59e0b8, 1);
+  const lampM = mat(0x2a2c38, 0);
+  const lampGlow = mat(0xffc97a, 1);
+  const torii = mat(0xc23b22, 0.12);
+
+  for (let r = 0; r < ROWS; r += 1) {
+    const side = rng() < 0.5 ? -1 : 1;
+    const pick = rng();
+    if (pick < 0.62) {
+      // building with lit window bands
+      const x = side * (4.2 + rng() * 5);
+      const { g, reg } = groupAt(side, x, r);
+      const w = 1.6 + rng() * 1.8;
+      const h = 1.8 + rng() * 4.4;
+      const dpt = 1.6 + rng() * 1.2;
+      child(g, 'box', [0, h / 2, 0], [w, h, dpt], rng() < 0.5 ? bodyA : bodyB);
+      const floors = Math.max(1, Math.floor(h / 0.9));
+      for (let f = 0; f < floors; f++) {
+        if (rng() < 0.2) continue;
+        const wm = rng() < 0.72 ? warm : cool;
+        child(g, 'box', [-side * (w / 2 + 0.015), 0.5 + f * 0.9, 0], [0.03, 0.28, dpt * (0.45 + rng() * 0.45)], wm);
+      }
+      if (rng() < 0.3) {
+        const nm = rng() < 0.5 ? neonA : neonB;
+        child(g, 'box', [-side * (w / 2 + 0.04), h * (0.5 + rng() * 0.3), 0], [0.06, 0.7 + rng() * 0.8, 0.18], nm);
+      }
+      reg();
+    } else if (pick < 0.74) {
+      // pagoda-ish tower
+      const x = side * (5 + rng() * 6);
+      const { g, reg } = groupAt(side, x, r);
+      let y = 0;
+      let w = 1.8 + rng() * 0.6;
+      const tiers = 3;
+      for (let t = 0; t < tiers; t++) {
+        const th = 0.9 - t * 0.12;
+        child(g, 'box', [0, y + th / 2, 0], [w * 0.7, th, w * 0.7], wood);
+        child(g, 'box', [0, y + th + 0.05, 0], [w, 0.12, w], roofM);
+        child(g, 'box', [-side * (w * 0.35 + 0.01), y + th / 2, 0], [0.02, 0.16, w * 0.36], warm);
+        y += th + 0.12;
+        w *= 0.78;
+      }
+      child(g, 'cylinder', [0, y + 0.18, 0], [0.05, 0.36, 0.05], wood);
+      reg();
+    } else if (pick < 0.8 && r % 6 === 0) {
+      // torii gate set back from the road
+      const x = side * (5.4 + rng() * 2);
+      const { g, reg } = groupAt(side, x, r);
+      child(g, 'cylinder', [-0.8, 0.8, 0], [0.14, 1.6, 0.14], torii);
+      child(g, 'cylinder', [0.8, 0.8, 0], [0.14, 1.6, 0.14], torii);
+      child(g, 'box', [0, 1.66, 0], [2.3, 0.16, 0.2], torii);
+      child(g, 'box', [0, 1.36, 0], [1.9, 0.1, 0.14], torii);
+      reg();
+    }
+  }
+
+  // street lamps, alternating sides
+  for (let r = 0; r < ROWS; r += 2) {
+    const side = r % 4 === 0 ? -1 : 1;
+    const { g, reg } = groupAt(side, side * 2.9, r);
+    child(g, 'cylinder', [0, 1.0, 0], [0.06, 2.0, 0.06], lampM);
+    child(g, 'box', [-side * 0.3, 1.98, 0], [0.65, 0.05, 0.05], lampM);
+    child(g, 'sphere', [-side * 0.58, 1.92, 0], [0.17, 0.14, 0.17], lampGlow);
+    child(g, 'sphere', [-side * 0.58, 1.92, 0], [0.5, 0.42, 0.5], glowMat(0xffc97a, 0.14));
+    child(g, 'sphere', [-side * 0.58, -0.55, 0], [1.6, 0.02, 1.6], glowMat(0xffc97a, 0.16));
+    reg();
+  }
+
+  // sidewalks
+  addBox(app, 'walk-l', [-2.95, -0.585, -FAR / 2 + 8], [1.3, 0.08, FAR + 24], mat(0x20222c, 0));
+  addBox(app, 'walk-r', [2.95, -0.585, -FAR / 2 + 8], [1.3, 0.08, FAR + 24], mat(0x20222c, 0));
+}
+
+// ---------------------------------------------------------------- ride capsule (cockpit)
+
 function createRideCapsule(
-  app: pc.Application,
   camera: pc.Entity,
-  darkMat: pc.Material,
-  trimMat: pc.Material,
-  glassMat: pc.Material,
   driverColor: string,
   passengerColor: string,
   gestures: pc.Entity[],
 ) {
+  const darkMat = mat(0x0a0c13, 0.04);
+  const trimMat = mat(0x181c28, 0.08);
+  const seatMat = mat(0x12151f, 0.05);
+  const glassMat = glowMat(0x87c7ff, 0.05);
+
   const capsule = new pc.Entity('ride-capsule');
   camera.addChild(capsule);
 
-  box(app, 'dash', [0, -0.54, -1.18], [2.7, 0.32, 0.42], trimMat, capsule);
-  box(app, 'dash-lip', [0, -0.31, -1.25], [2.9, 0.09, 0.16], darkMat, capsule);
-  box(app, 'left-pillar', [-1.18, 0.03, -1.34], [0.13, 1.32, 0.11], darkMat, capsule).setEulerAngles(0, 0, -8);
-  box(app, 'right-pillar', [1.18, 0.03, -1.34], [0.13, 1.32, 0.11], darkMat, capsule).setEulerAngles(0, 0, 8);
-  box(app, 'roof-band', [0, 0.73, -1.3], [2.7, 0.12, 0.12], darkMat, capsule);
-  box(app, 'windshield-glow', [0, 0.13, -1.48], [2.05, 0.04, 0.06], glassMat, capsule);
+  // sized for portrait phone: visible half-width at depth d ≈ 0.45·d, half-height ≈ 0.675·d
+  // thin roof band across the top
+  child(capsule, 'box', [0, 0.94, -1.4], [3.6, 0.32, 0.2], darkMat);
+  // a-pillars at the screen edges
+  child(capsule, 'box', [-0.6, 0.1, -1.4], [0.09, 2.0, 0.09], darkMat).setLocalEulerAngles(0, 0, -5);
+  child(capsule, 'box', [0.6, 0.1, -1.4], [0.09, 2.0, 0.09], darkMat).setLocalEulerAngles(0, 0, 5);
+  // rear-view mirror hanging from the roof
+  child(capsule, 'box', [0, 0.72, -1.42], [0.035, 0.1, 0.02], darkMat);
+  child(capsule, 'box', [0, 0.65, -1.42], [0.2, 0.06, 0.03], darkMat);
+  child(capsule, 'box', [0, 0.65, -1.405], [0.17, 0.042, 0.005], glassMat);
+  // low dashboard strip
+  child(capsule, 'box', [0, -0.92, -1.3], [3.6, 0.34, 0.5], trimMat);
+  child(capsule, 'box', [0, -0.74, -1.34], [3.6, 0.05, 0.36], seatMat);
 
-  createOccupant(app, capsule, 'driver', [-0.44, -0.22, -1.52], driverColor, gestures);
-  createOccupant(app, capsule, 'passenger', [0.44, -0.22, -1.52], passengerColor, gestures);
+  createOccupant(capsule, 'driver', [-0.42, -0.78, -1.6], driverColor, gestures);
+  createOccupant(capsule, 'passenger', [0.42, -0.78, -1.6], passengerColor, gestures);
 }
 
-function createOccupant(app: pc.Application, parent: pc.Entity, name: string, pos: [number, number, number], colorHex: string, gestures: pc.Entity[]) {
-  const bodyMat = mat(colorToNumber(colorHex), 0.18);
-  const body = box(app, `${name}-body`, [pos[0], pos[1], pos[2]], [0.32, 0.38, 0.18], bodyMat, parent);
-  const head = sphere(app, `${name}-head`, [pos[0], pos[1] + 0.32, pos[2] - 0.02], [0.18, 0.18, 0.18], bodyMat, parent);
-  const hand = sphere(app, `${name}-gesture`, [pos[0] + (name === 'driver' ? 0.25 : -0.25), pos[1] + 0.36, pos[2] - 0.08], [0.08, 0.08, 0.08], bodyMat, parent);
+function createOccupant(parent: pc.Entity, name: string, pos: [number, number, number], colorHex: string, gestures: pc.Entity[]) {
+  const bodyMat = mat(colorToNumber(colorHex), 0.22);
+  const body = child(parent, 'box', [pos[0], pos[1], pos[2]], [0.34, 0.26, 0.16], bodyMat);
+  body.name = `${name}-body`;
+  const head = child(parent, 'sphere', [pos[0], pos[1] + 0.24, pos[2]], [0.15, 0.15, 0.15], bodyMat);
+  head.name = `${name}-head`;
+  const hand = child(parent, 'sphere', [pos[0] + (name === 'driver' ? 0.24 : -0.24), pos[1] + 0.3, pos[2] - 0.04], [0.07, 0.07, 0.07], bodyMat);
+  hand.name = `${name}-gesture`;
   hand.enabled = false;
   gestures.push(body, head, hand);
 }
@@ -334,57 +859,146 @@ function updateCapsuleGestures(gestures: pc.Entity[], driverGesture?: GestureKin
   if (passengerHand) passengerHand.enabled = !!passengerGesture;
 }
 
+// ---------------------------------------------------------------- fireworks
+
 function spawnFirework(app: pc.Application, particles: { entity: pc.Entity; vel: pc.Vec3; life: number }[], synced: boolean, driverColor: number, passengerColor: number) {
   const colors = synced ? [driverColor, passengerColor, 0xffffff, 0xffd166] : [0xffffff, 0xd6d6d6];
-  const count = synced ? 58 : 20;
+  const count = synced ? 64 : 22;
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 * i) / count;
-    const radius = synced ? 2.4 : 1.2;
+    const radius = synced ? 3.2 : 1.6;
     const speed = 1.0 + ((i * 7) % 9) * 0.09;
-    const entity = sphere(app, `spark-${Date.now()}-${i}`, [0, 1.7, -15], [0.07, 0.07, 0.07], mat(colors[i % colors.length], 1.0));
+    const entity = primitive(`spark-${Date.now()}-${i}`, 'sphere', [0, 4.5, -26], [0.12, 0.12, 0.12], mat(colors[i % colors.length], 1.0));
+    app.root.addChild(entity);
     particles.push({
       entity,
-      vel: new pc.Vec3(Math.cos(angle) * radius * speed, Math.sin(angle) * radius * speed + 0.8, -0.4),
-      life: synced ? 1.45 : 0.9,
+      vel: new pc.Vec3(Math.cos(angle) * radius * speed, Math.sin(angle) * radius * speed + 1.2, -0.4),
+      life: synced ? 1.6 : 1.0,
     });
   }
 }
 
-function box(app: pc.Application, name: string, pos: [number, number, number], scale: [number, number, number], material: pc.Material, parent?: pc.Entity) {
-  const e = primitive(name, 'box', pos, scale, material);
-  (parent ?? app.root).addChild(e);
-  return e;
+// ---------------------------------------------------------------- mesh builder (flat-shaded, vertex-colored)
+
+class MeshBuilder {
+  positions: number[] = [];
+  normals: number[] = [];
+  colors: number[] = [];
+
+  tri(a: V3, b: V3, c: V3, col: number) {
+    this.triColors(a, b, c, col, col, col);
+  }
+
+  triColors(a: V3, b: V3, c: V3, ca: number, cb: number, cc: number) {
+    const n = faceNormal(a, b, c);
+    this.positions.push(...a, ...b, ...c);
+    this.normals.push(...n, ...n, ...n);
+    pushColor(this.colors, ca);
+    pushColor(this.colors, cb);
+    pushColor(this.colors, cc);
+  }
+
+  quad(a: V3, b: V3, c: V3, d: V3, col: number) {
+    this.quadColors(a, b, c, d, col, col, col, col);
+  }
+
+  quadColors(a: V3, b: V3, c: V3, d: V3, ca: number, cb: number, cc: number, cd: number) {
+    this.triColors(a, b, c, ca, cb, cc);
+    this.triColors(a, c, d, ca, cc, cd);
+  }
+
+  entity(app: pc.Application, name: string, material: pc.Material): pc.Entity {
+    const mesh = new pc.Mesh(app.graphicsDevice);
+    mesh.setPositions(this.positions);
+    mesh.setNormals(this.normals);
+    mesh.setColors(this.colors, 4);
+    mesh.update(pc.PRIMITIVE_TRIANGLES);
+    const mi = new pc.MeshInstance(mesh, material);
+    const e = new pc.Entity(name);
+    e.addComponent('render', { meshInstances: [mi] });
+    return e;
+  }
 }
 
-function sphere(app: pc.Application, name: string, pos: [number, number, number], scale: [number, number, number], material: pc.Material, parent?: pc.Entity) {
-  const e = primitive(name, 'sphere', pos, scale, material);
-  (parent ?? app.root).addChild(e);
-  return e;
+type V3 = [number, number, number];
+
+function faceNormal(a: V3, b: V3, c: V3): V3 {
+  const ab: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const ac: V3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  return norm3(cross3(ab, ac));
 }
 
-function cone(app: pc.Application, name: string, pos: [number, number, number], scale: [number, number, number], material: pc.Material, sides = 8, parent?: pc.Entity) {
-  const e = primitive(name, 'cone', pos, scale, material, { segments: sides });
-  (parent ?? app.root).addChild(e);
-  return e;
+function cross3(a: V3, b: V3): V3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
-function cylinder(app: pc.Application, name: string, pos: [number, number, number], scale: [number, number, number], material: pc.Material, parent?: pc.Entity) {
-  const e = primitive(name, 'cylinder', pos, scale, material);
-  (parent ?? app.root).addChild(e);
-  return e;
+function norm3(v: V3): V3 {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
 }
 
-function primitive(name: string, type: 'box' | 'sphere' | 'cone' | 'cylinder', pos: [number, number, number], scale: [number, number, number], material: pc.Material, extra?: Record<string, unknown>) {
-  const e = new pc.Entity(name);
-  e.addComponent('render', { type, material, ...(extra ?? {}) });
-  e.setLocalPosition(pos[0], pos[1], pos[2]);
-  e.setLocalScale(scale[0], scale[1], scale[2]);
-  return e;
+function pushColor(arr: number[], hex: number) {
+  arr.push(((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255, 1);
+}
+
+// ---------------------------------------------------------------- materials & primitives
+
+function litVCMat() {
+  const m = new pc.StandardMaterial();
+  m.diffuse = new pc.Color(1, 1, 1);
+  m.diffuseVertexColor = true;
+  m.update();
+  return m;
+}
+
+function unlitVCMat() {
+  const m = new pc.StandardMaterial();
+  m.useLighting = false;
+  m.useFog = false;
+  m.cull = pc.CULLFACE_NONE;
+  m.diffuse = new pc.Color(0, 0, 0);
+  m.emissive = new pc.Color(1, 1, 1);
+  m.emissiveVertexColor = true;
+  m.update();
+  return m;
+}
+
+function makeRng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function unlitMat(hex: number) {
+  const m = new pc.StandardMaterial();
+  m.useLighting = false;
+  m.useFog = false;
+  m.diffuse = new pc.Color(0, 0, 0);
+  m.emissive = color(hex, 1);
+  m.update();
+  return m;
+}
+
+function glowMat(hex: number, opacity: number) {
+  const m = new pc.StandardMaterial();
+  m.useLighting = false;
+  m.useFog = false;
+  m.diffuse = new pc.Color(0, 0, 0);
+  m.emissive = color(hex, 1);
+  m.opacity = opacity;
+  m.blendType = pc.BLEND_ADDITIVE;
+  m.depthWrite = false;
+  m.update();
+  return m;
 }
 
 function mat(hex: number, emissive = 0, opacity = 1) {
   const material = new pc.StandardMaterial();
-  material.diffuse = color(hex, opacity);
+  material.diffuse = color(hex, 1);
   material.emissive = color(hex, emissive);
   if (opacity < 1) {
     material.opacity = opacity;
@@ -401,10 +1015,44 @@ function color(hex: number, intensity = 1) {
   return new pc.Color(r * intensity, g * intensity, b * intensity, 1);
 }
 
+function lerpColor(a: number, b: number, t: number): number {
+  const tt = Math.max(0, Math.min(1, t));
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  return (Math.round(ar + (br - ar) * tt) << 16) | (Math.round(ag + (bg - ag) * tt) << 8) | Math.round(ab + (bb - ab) * tt);
+}
+
+function scaleColor(hex: number, s: number): number {
+  const r = Math.min(255, Math.round(((hex >> 16) & 255) * s));
+  const g = Math.min(255, Math.round(((hex >> 8) & 255) * s));
+  const b = Math.min(255, Math.round((hex & 255) * s));
+  return (r << 16) | (g << 8) | b;
+}
+
 function colorToNumber(hex: string) {
   return parseInt(hex.replace('#', ''), 16);
 }
 
 function positiveMod(n: number, m: number) {
   return ((n % m) + m) % m;
+}
+
+function primitive(name: string, type: 'box' | 'sphere' | 'cone' | 'cylinder' | 'torus', pos: V3, scale: V3, material: pc.Material, extra?: Record<string, unknown>) {
+  const e = new pc.Entity(name);
+  e.addComponent('render', { type, material, ...(extra ?? {}) });
+  e.setLocalPosition(pos[0], pos[1], pos[2]);
+  e.setLocalScale(scale[0], scale[1], scale[2]);
+  return e;
+}
+
+function addBox(app: pc.Application, name: string, pos: V3, scale: V3, material: pc.Material) {
+  const e = primitive(name, 'box', pos, scale, material);
+  app.root.addChild(e);
+  return e;
+}
+
+function child(parent: pc.Entity, type: 'box' | 'sphere' | 'cone' | 'cylinder' | 'torus', pos: V3, scale: V3, material: pc.Material, segments?: number) {
+  const e = primitive(`${parent.name}-part`, type, pos, scale, material, segments ? { segments } : undefined);
+  parent.addChild(e);
+  return e;
 }

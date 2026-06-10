@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import RideScene from '../scene/RideScene';
 import type { CameraMode } from '../scene/RideScene';
+import PlayCanvasRideScene from '../scene/PlayCanvasRideScene';
 import ParisTiles, { PARIS_TILE_ANCHORS, type ParisAnchorId } from '../scene/ParisTiles';
 import type { RoadId } from '../scene/scenes';
 import type { GestureKind } from '@roadie/shared';
@@ -13,14 +14,36 @@ const GESTURE_OPTIONS: (GestureKind | null)[] = [null, 'wave', 'heart', 'headlig
 const PARIS_ANCHOR_OPTIONS = Object.keys(PARIS_TILE_ANCHORS) as ParisAnchorId[];
 const RIDE_DURATION = 120;
 
+type PreviewEngine = 'playcanvas' | 'r3f';
+
+const initialParams = new URLSearchParams(window.location.search);
+const initialRoad = (ROAD_OPTIONS as string[]).includes(initialParams.get('road') ?? '')
+  ? (initialParams.get('road') as RoadId)
+  : 'desert';
+const initialT = Number(initialParams.get('t') ?? 0) || 0;
+const initialEngine: PreviewEngine = initialParams.get('engine') === 'r3f' ? 'r3f' : 'playcanvas';
+const initialGesture = (GESTURE_OPTIONS as (string | null)[]).includes(initialParams.get('gesture'))
+  ? (initialParams.get('gesture') as GestureKind)
+  : null;
+
 export default function ScenePreview() {
-  const [road, setRoad]               = useState<RoadId>('desert');
-  const [positionSec, setPositionSec] = useState(0);
+  const [road, setRoad]               = useState<RoadId>(initialRoad);
+  const [engine, setEngine]           = useState<PreviewEngine>(initialEngine);
+  const [firework, setFirework]       = useState<{ synced: boolean } | null>(null);
+  const [positionSec, setPositionSec] = useState(initialT);
   const [playing, setPlaying]         = useState(false);
   const [driverColor, setDriverColor]     = useState('#F5A623');
   const [passengerColor, setPassengerColor] = useState('#1FB6C4');
-  const [driverGesture, setDriverGesture]       = useState<GestureKind | null>(null);
+  const [driverGesture, setDriverGesture]       = useState<GestureKind | null>(initialGesture);
   const [passengerGesture, setPassengerGesture] = useState<GestureKind | null>(null);
+
+  // ?fw=synced|solo — auto-fire a firework shortly after mount (headless screenshot hook)
+  useEffect(() => {
+    const fw = initialParams.get('fw');
+    if (!fw) return;
+    const id = setTimeout(() => setFirework({ synced: fw === 'synced' }), 3000);
+    return () => clearTimeout(id);
+  }, []);
   const [cameraMode, setCameraMode]   = useState<CameraMode>('interior');
   const [pixelRatio, setPixelRatio]   = useState(0.25);
   const [useGoogleMaps, setUseGoogleMaps] = useState(false);
@@ -62,6 +85,17 @@ export default function ScenePreview() {
               liftM={googleLiftM}
               pixelRatio={pixelRatio}
             />
+          : engine === 'playcanvas'
+          ? <PlayCanvasRideScene
+              key={road}
+              road={road}
+              positionSec={positionSec}
+              driverColor={driverColor}
+              passengerColor={passengerColor}
+              driverGestureKind={driverGesture}
+              passengerGestureKind={passengerGesture}
+              firework={firework}
+            />
           : <RideScene
               road={road}
               positionSec={positionSec}
@@ -88,14 +122,35 @@ export default function ScenePreview() {
           {useGoogleMaps ? '🗺 Paris' : '🚗 car'}
         </button>
 
-        {/* Camera toggle — the main control */}
-        <button
-          onClick={() => setCameraMode((m) => m === 'interior' ? 'exterior' : 'interior')}
-          className="rounded-full px-3 py-1 font-semibold transition"
-          style={{ background: cameraMode === 'exterior' ? '#F5A623' : 'rgba(255,255,255,0.15)', color: cameraMode === 'exterior' ? '#000' : '#fff' }}
-        >
-          {cameraMode === 'interior' ? '🚗 inside' : '🌍 outside'}
-        </button>
+        {/* Engine toggle */}
+        {!useGoogleMaps && (
+          <button
+            onClick={() => setEngine((e) => e === 'playcanvas' ? 'r3f' : 'playcanvas')}
+            className="rounded-full px-3 py-1 font-semibold transition"
+            style={{ background: engine === 'playcanvas' ? '#e2643b' : 'rgba(255,255,255,0.15)', color: '#fff' }}
+          >
+            {engine === 'playcanvas' ? 'playcanvas' : 'r3f'}
+          </button>
+        )}
+
+        {/* Firework test (playcanvas) */}
+        {!useGoogleMaps && engine === 'playcanvas' && (
+          <>
+            <button onClick={() => setFirework({ synced: false })} className="rounded bg-white/10 px-2 py-0.5">🎆</button>
+            <button onClick={() => setFirework({ synced: true })} className="rounded bg-white/10 px-2 py-0.5">🎆🎆</button>
+          </>
+        )}
+
+        {/* Camera toggle — r3f only */}
+        {!useGoogleMaps && engine === 'r3f' && (
+          <button
+            onClick={() => setCameraMode((m) => m === 'interior' ? 'exterior' : 'interior')}
+            className="rounded-full px-3 py-1 font-semibold transition"
+            style={{ background: cameraMode === 'exterior' ? '#F5A623' : 'rgba(255,255,255,0.15)', color: cameraMode === 'exterior' ? '#000' : '#fff' }}
+          >
+            {cameraMode === 'interior' ? '🚗 inside' : '🌍 outside'}
+          </button>
+        )}
 
         {/* Pixel size */}
         <span className="text-white/40 ml-1">pixels:</span>
