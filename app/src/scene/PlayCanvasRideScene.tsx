@@ -22,8 +22,10 @@ const CELL = 6;           // terrain row length
 const ROWS = FAR / CELL;  // 39
 const WORLD_SPEED = 7;
 const ROAD_TOP = -0.57;   // y of the road surface
-const CAR_Z = -1.0;       // the hero car sits here, facing +z (toward the camera)
-const WRAP_AHEAD = 10;    // props recycle this far behind the camera, never on screen
+const CAR_Z = -1.0;       // the hero car sits here, facing +z
+const BAND = FAR / 2;     // props live in z ∈ [−BAND, +BAND] around the car (the camera orbits)
+const ORBIT_SECONDS = 48; // one slow cinematic revolution
+const TERRAIN_AHEAD = 220;
 
 type Theme = {
   skyTop: number;
@@ -103,7 +105,7 @@ const THEMES: Record<RoadId, Theme> = {
   },
 };
 
-type MovingEntity = { entity: pc.Entity; base: number; x: number; y: number };
+type MovingEntity = { entity: pc.Entity; base: number; x: number; y: number; fade?: boolean };
 type Drifter = { entity: pc.Entity; x: number; y: number; z: number; speed: number };
 type Bobber = { entity: pc.Entity; x: number; y: number; phase: number; amp: number };
 
@@ -165,14 +167,10 @@ export default function PlayCanvasRideScene({
       nearClip: 0.05,
       farClip: 420,
     });
-    // desktop landscape gets the hero framing; narrow/portrait pulls back so the
-    // car doesn't swallow the frame
-    const placeCamera = (aspect: number) => {
-      const k = aspect >= 1 ? 1 : 1 + (1 - aspect) * 1.1;
-      camera.setPosition(0, 1.7 + (k - 1) * 0.75, CAR_Z + 5.8 * k);
-      camera.lookAt(0, 0.35, -3);
-    };
-    placeCamera(1.5);
+    // the camera orbits the car (see update loop); narrow viewports pull back
+    let aspectK = 1;
+    camera.setPosition(0, 1.7, CAR_Z + 5.8);
+    camera.lookAt(0, 0.45, CAR_Z);
     app.root.addChild(camera);
 
     const sun = new pc.Entity('sun');
@@ -202,7 +200,8 @@ export default function PlayCanvasRideScene({
     const resize = () => {
       const rect = mount.getBoundingClientRect();
       app.resizeCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
-      placeCamera(rect.width / Math.max(1, rect.height));
+      const aspect = rect.width / Math.max(1, rect.height);
+      aspectK = aspect >= 1 ? 1 : 1 + (1 - aspect) * 1.1;
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
@@ -213,14 +212,20 @@ export default function PlayCanvasRideScene({
       elapsed += dt;
       const offset = positionRef.current * WORLD_SPEED;
 
-      // world streams toward -z: ground passes the car front-to-back, as seen
-      // from a camera retreating ahead of a forward-driving car
+      // world streams toward -z; props live in a band centred on the car so the
+      // orbiting camera always has world in every direction. large props
+      // scale-fade at the band edges instead of popping.
       for (const item of moving) {
-        item.entity.setLocalPosition(item.x, item.y, -FAR + WRAP_AHEAD + positiveMod(item.base - offset, FAR));
+        const z = -BAND + positiveMod(item.base - offset, FAR);
+        item.entity.setLocalPosition(item.x, item.y, z);
+        if (item.fade) {
+          const f = Math.max(0.001, Math.min(1, (z + BAND) / 12, (BAND - z) / 12));
+          item.entity.setLocalScale(f, f, f);
+        }
       }
 
       // terrain tiles leapfrog so a seam never enters view
-      const a = positiveMod(-offset, FAR) + CELL;
+      const a = positiveMod(-offset, FAR) + TERRAIN_AHEAD;
       terrainTiles.forEach((tile, i) => tile.setLocalPosition(0, 0, a - i * FAR));
 
       for (const c of drifters) {
@@ -234,7 +239,18 @@ export default function PlayCanvasRideScene({
         b.entity.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.1 + b.phase) * 3);
       }
 
-      // the camera stays locked; the car gets the life — gentle bob and roll
+      // slow cinematic orbit: low at the front/back, lifted at the sides to
+      // clear roadside props. the car gets the life — gentle bob and roll.
+      const th = (elapsed / ORBIT_SECONDS) * Math.PI * 2;
+      const sx = Math.sin(th);
+      // low cinematic shot at front/back, rising to a brief aerial beat at the
+      // sides (the corridor beside the road is too narrow for a low side shot)
+      camera.setPosition(
+        sx * 3.8,
+        1.7 + sx * sx * 3.7 + (aspectK - 1) * 0.75,
+        CAR_Z + Math.cos(th) * 5.8 * aspectK,
+      );
+      camera.lookAt(0, 0.45, CAR_Z);
       carRig.setLocalPosition(Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
       carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
 
@@ -261,7 +277,9 @@ export default function PlayCanvasRideScene({
     });
 
     // terrain tiles are created inside createTerrain; grab them by name
-    const terrainTiles = [app.root.findByName('terrain-0') as pc.Entity, app.root.findByName('terrain-1') as pc.Entity].filter(Boolean);
+    const terrainTiles = [0, 1, 2]
+      .map((i) => app.root.findByName(`terrain-${i}`) as pc.Entity)
+      .filter(Boolean);
 
     app.start();
 
@@ -391,8 +409,13 @@ function createBackdrop(app: pc.Application, theme: Theme, road: RoadId) {
     app.root.addChild(e);
   };
 
-  make(-226, theme.backdrop.far, road === 'mountain' ? 26 : road === 'city' ? 16 : 12, 11);
-  make(-214, theme.backdrop.near, road === 'mountain' ? 18 : road === 'city' ? 10 : 8, 23);
+  const tallFar = road === 'mountain' ? 26 : road === 'city' ? 16 : 12;
+  const tallNear = road === 'mountain' ? 18 : road === 'city' ? 10 : 8;
+  make(-226, theme.backdrop.far, tallFar, 11);
+  make(-214, theme.backdrop.near, tallNear, 23);
+  // mirrored set behind the car for the orbiting camera
+  make(226, theme.backdrop.far, tallFar, 31);
+  make(214, theme.backdrop.near, tallNear, 47);
 }
 
 // ---------------------------------------------------------------- terrain
@@ -432,7 +455,7 @@ function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightF
     return p.base + j * p.amp;
   };
 
-  for (let tileIdx = 0; tileIdx < 2; tileIdx++) {
+  for (let tileIdx = 0; tileIdx < 3; tileIdx++) {
     // identical rng stream per tile so the two copies tile seamlessly
     const colorRng = makeRng(road.length * 77 + 3);
     const b = new MeshBuilder();
@@ -461,15 +484,16 @@ function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightF
   }
 
   if (road === 'coast') {
-    // ocean: static vertex-colored plane, deeper near → pale at horizon
+    // ocean: static vertex-colored plane, deeper near the car → pale at both horizons
     const ob = new MeshBuilder();
     const nearC = 0x1577a0, farC = 0x8ecbd8;
-    const zSteps = 8;
+    const zSteps = 16;
+    const span = 2 * TERRAIN_AHEAD + 20;
     for (let i = 0; i < zSteps; i++) {
-      const z0 = 6 - (i * 260) / zSteps;
-      const z1 = 6 - ((i + 1) * 260) / zSteps;
-      const c0 = lerpColor(nearC, farC, i / zSteps);
-      const c1 = lerpColor(nearC, farC, (i + 1) / zSteps);
+      const z0 = span / 2 - (i * span) / zSteps;
+      const z1 = span / 2 - ((i + 1) * span) / zSteps;
+      const c0 = lerpColor(nearC, farC, Math.abs(z0) / (span / 2));
+      const c1 = lerpColor(nearC, farC, Math.abs(z1) / (span / 2));
       ob.quadColors([5.5, -2.6, z0], [150, -2.6, z0], [150, -2.6, z1], [5.5, -2.6, z1], c0, c0, c1, c1);
     }
     const ocean = ob.entity(app, 'ocean', litVCMat());
@@ -487,12 +511,13 @@ function createRoad(app: pc.Application, moving: MovingEntity[], theme: Theme) {
   const edgeMat = mat(theme.edge, 0.15);
   const shoulderMat = mat(theme.shoulder, 0);
 
-  // static: asphalt, edge lines, shoulders (uniform surfaces don't show motion)
-  addBox(app, 'road', [0, -0.6, -FAR / 2 + 8], [3.4, 0.06, FAR + 24], roadMat);
-  addBox(app, 'edge-l', [-1.45, -0.565, -FAR / 2 + 8], [0.09, 0.012, FAR + 24], edgeMat);
-  addBox(app, 'edge-r', [1.45, -0.565, -FAR / 2 + 8], [0.09, 0.012, FAR + 24], edgeMat);
-  addBox(app, 'shoulder-l', [-2.15, -0.605, -FAR / 2 + 8], [1.0, 0.045, FAR + 24], shoulderMat);
-  addBox(app, 'shoulder-r', [2.15, -0.605, -FAR / 2 + 8], [1.0, 0.045, FAR + 24], shoulderMat);
+  // static: asphalt, edge lines, shoulders (uniform surfaces don't show motion);
+  // symmetric around the car so the orbiting camera never sees the road end
+  addBox(app, 'road', [0, -0.6, 0], [3.4, 0.06, 2 * TERRAIN_AHEAD + 20], roadMat);
+  addBox(app, 'edge-l', [-1.45, -0.565, 0], [0.09, 0.012, 2 * TERRAIN_AHEAD + 20], edgeMat);
+  addBox(app, 'edge-r', [1.45, -0.565, 0], [0.09, 0.012, 2 * TERRAIN_AHEAD + 20], edgeMat);
+  addBox(app, 'shoulder-l', [-2.15, -0.605, 0], [1.0, 0.045, 2 * TERRAIN_AHEAD + 20], shoulderMat);
+  addBox(app, 'shoulder-r', [2.15, -0.605, 0], [1.0, 0.045, 2 * TERRAIN_AHEAD + 20], shoulderMat);
 
   // scrolling: centre dashes
   const dashCount = 30;
@@ -519,7 +544,7 @@ function createThemeWorld(
     app.root.addChild(g);
     const y = heightAt(side, Math.abs(x), row);
     const base = FAR - ((row % ROWS) + ROWS) % ROWS * CELL;
-    return { g, reg: () => moving.push({ entity: g, base, x, y }) };
+    return { g, reg: () => moving.push({ entity: g, base, x, y, fade: true }) };
   };
 
   if (road === 'desert') buildDesert(rng, groupAt);
@@ -542,7 +567,7 @@ function createThemeWorld(
       }
       const x = -120 + rng() * 240;
       const y = 26 + rng() * 34;
-      const z = -195 - rng() * 12;
+      const z = (i % 2 === 0 ? -1 : 1) * (195 + rng() * 12); // both horizons
       cluster.setLocalPosition(x, y, z);
       app.root.addChild(cluster);
       drifters.push({ entity: cluster, x, y, z, speed: 0.4 + rng() * 0.5 });
@@ -610,9 +635,9 @@ function buildDesert(rng: () => number, groupAt: GroupAt) {
     }
   }
 
-  // telephone poles — route 66's metronome
+  // telephone poles — route 66's metronome (outside the camera's orbit)
   for (let r = 0; r < ROWS; r += 3) {
-    const { g, reg } = groupAt(-1, -3.4, r);
+    const { g, reg } = groupAt(-1, -4.1, r);
     child(g, 'cylinder', [0, 1.3, 0], [0.09, 2.6, 0.09], pole);
     child(g, 'box', [0, 2.32, 0], [0.95, 0.07, 0.07], pole);
     child(g, 'box', [0, 2.05, 0], [0.7, 0.06, 0.06], pole);
@@ -663,7 +688,7 @@ function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber
   }
 
   // guardrail on the ocean side: static rail + scrolling posts
-  addBox(app, 'rail', [2.62, -0.18, -FAR / 2 + 8], [0.07, 0.1, FAR + 24], rail);
+  addBox(app, 'rail', [2.62, -0.18, 0], [0.07, 0.1, 2 * TERRAIN_AHEAD + 20], rail);
   for (let r = 0; r < ROWS; r += 1) {
     const { g, reg } = groupAt(1, 2.62, r);
     child(g, 'box', [0, 0.22, 0], [0.1, 0.45, 0.1], post);
@@ -686,7 +711,7 @@ function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber
     app.root.addChild(boat);
     const x = 20 + rng() * 26;
     const y = -2.45;
-    moving.push({ entity: boat, base: rng() * FAR, x, y });
+    moving.push({ entity: boat, base: rng() * FAR, x, y, fade: true });
     bobbers.push({ entity: boat, x, y, phase: rng() * 6, amp: 0.06 });
   }
 }
@@ -759,10 +784,10 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
     const side = rng() < 0.5 ? -1 : 1;
     const pick = rng();
     if (pick < 0.62) {
-      // building with lit window bands
-      const x = side * (4.2 + rng() * 5);
-      const { g, reg } = groupAt(side, x, r);
+      // building with lit window bands; facades stay outside the camera's orbit
       const w = 1.6 + rng() * 1.8;
+      const x = side * Math.max(4.2 + rng() * 5, 4.2 + w / 2);
+      const { g, reg } = groupAt(side, x, r);
       const h = 1.8 + rng() * 4.4;
       const dpt = 1.6 + rng() * 1.2;
       child(g, 'box', [0, h / 2, 0], [w, h, dpt], rng() < 0.5 ? bodyA : bodyB);
@@ -779,7 +804,7 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
       reg();
     } else if (pick < 0.74) {
       // pagoda-ish tower
-      const x = side * (5 + rng() * 6);
+      const x = side * (5.6 + rng() * 6);
       const { g, reg } = groupAt(side, x, r);
       let y = 0;
       let w = 1.8 + rng() * 0.6;
@@ -819,8 +844,8 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
   }
 
   // sidewalks
-  addBox(app, 'walk-l', [-2.95, -0.585, -FAR / 2 + 8], [1.3, 0.08, FAR + 24], mat(0x20222c, 0));
-  addBox(app, 'walk-r', [2.95, -0.585, -FAR / 2 + 8], [1.3, 0.08, FAR + 24], mat(0x20222c, 0));
+  addBox(app, 'walk-l', [-2.95, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
+  addBox(app, 'walk-r', [2.95, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
 }
 
 // ---------------------------------------------------------------- the hero car
@@ -837,12 +862,12 @@ function createCar(
 
   // occupants are placed synchronously so they exist even while the GLB streams in.
   // they face +z (toward the camera); car cabin sits just behind the car's centre.
-  // the model is RHD (wheel on the car's right = viewer's left), so the driver sits there
+  // the model is LHD — wheel on the car's left, the viewer's right from the front
   const driver = createOccupant(rig, 'driver', [0, 0, 0], driverColor, gestures, 'man');
-  driver.setLocalPosition(-0.3, 0.28, -0.3);
+  driver.setLocalPosition(0.3, 0.28, 0.18);
   driver.setLocalEulerAngles(0, 180, 0);
   const passenger = createOccupant(rig, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman');
-  passenger.setLocalPosition(0.3, 0.28, -0.3);
+  passenger.setLocalPosition(-0.3, 0.28, 0.18);
   passenger.setLocalEulerAngles(0, 180, 0);
 
   // soft fake contact shadow (static — doesn't bob with the rig)
@@ -861,7 +886,7 @@ function createCar(
   asset.on('load', () => {
     // wrapper carries our yaw/scale; the GLB root keeps its own orientation fix
     const holder = new pc.Entity('car-holder');
-    holder.setLocalEulerAngles(0, -90, 0); // model forward is +x; face the camera (+z)
+    holder.setLocalEulerAngles(0, 90, 0); // model nose is -x; point it at +z, the direction of travel
     rig.addChild(holder);
     const model = (asset.resource as pc.ContainerResource).instantiateRenderEntity();
     holder.addChild(model);
@@ -900,7 +925,8 @@ function createOccupant(
 ): pc.Entity {
   const clothes = mat(colorToNumber(colorHex), 0.2);
   const skin = mat(variant === 'man' ? 0xc08a5e : 0xd2a072, 0.08);
-  const hair = mat(variant === 'man' ? 0x4a3526 : 0x7a5230, 0.04);
+  const hair = mat(variant === 'man' ? 0x161210 : 0x7a5230, 0.04); // man: black afro
+  const shades = mat(0x10131a, 0.3);
 
   const figure = new pc.Entity(`${name}-body`);
   figure.setLocalPosition(pos[0], pos[1], pos[2]);
@@ -923,14 +949,21 @@ function createOccupant(
   child(figure, 'sphere', [0.072, headY, 0], [0.032, 0.042, 0.03], skin);
 
   if (variant === 'man') {
-    // short crop: rounded cap over the top-back of the skull + a nape patch
-    child(figure, 'sphere', [0, headY + 0.035, 0.022], [0.155, 0.105, 0.15], hair);
-    child(figure, 'sphere', [0, headY - 0.025, 0.055], [0.125, 0.1, 0.055], hair);
+    // a proper afro: big rounded crown, kept clear of the face
+    child(figure, 'sphere', [0, headY + 0.105, 0.022], [0.205, 0.165, 0.19], hair);
+    child(figure, 'sphere', [-0.082, headY + 0.045, 0.02], [0.105, 0.105, 0.115], hair);
+    child(figure, 'sphere', [0.082, headY + 0.045, 0.02], [0.105, 0.105, 0.115], hair);
+    child(figure, 'sphere', [0, headY + 0.03, 0.065], [0.15, 0.13, 0.06], hair);
   } else {
     // long hair: rounded cap + a smooth curtain falling to the shoulder line
     child(figure, 'sphere', [0, headY + 0.035, 0.015], [0.15, 0.11, 0.145], hair);
     child(figure, 'sphere', [0, headY - 0.13, 0.062], [0.165, 0.27, 0.07], hair);
   }
+
+  // sunglasses: dark band across the face with a thin bridge highlight
+  const faceR = variant === 'man' ? 0.072 : 0.067;
+  child(figure, 'box', [0, headY + 0.015, -(faceR - 0.005)], [0.125, 0.038, 0.025], shades);
+  child(figure, 'box', [0, headY + 0.015, -(faceR + 0.008)], [0.04, 0.012, 0.01], shades);
 
   // raised waving hand + forearm (toggled by gestures)
   const hand = new pc.Entity(`${name}-gesture`);
