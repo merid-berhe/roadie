@@ -836,20 +836,66 @@ function createRideCapsule(
   child(capsule, 'box', [0, -0.92, -1.3], [3.6, 0.34, 0.5], trimMat);
   child(capsule, 'box', [0, -0.74, -1.34], [3.6, 0.05, 0.36], seatMat);
 
-  createOccupant(capsule, 'driver', [-0.42, -0.78, -1.6], driverColor, gestures);
-  createOccupant(capsule, 'passenger', [0.42, -0.78, -1.6], passengerColor, gestures);
+  createOccupant(capsule, 'driver', [-0.38, -0.78, -1.6], driverColor, gestures, 'man');
+  createOccupant(capsule, 'passenger', [0.38, -0.78, -1.6], passengerColor, gestures, 'woman');
 }
 
-function createOccupant(parent: pc.Entity, name: string, pos: [number, number, number], colorHex: string, gestures: pc.Entity[]) {
-  const bodyMat = mat(colorToNumber(colorHex), 0.22);
-  const body = child(parent, 'box', [pos[0], pos[1], pos[2]], [0.34, 0.26, 0.16], bodyMat);
-  body.name = `${name}-body`;
-  const head = child(parent, 'sphere', [pos[0], pos[1] + 0.24, pos[2]], [0.15, 0.15, 0.15], bodyMat);
+// Human silhouettes seen from the back seat. The rider's glyph colour lives in
+// the clothing; skin and hair stay neutral so they read as people, not tokens.
+function createOccupant(
+  parent: pc.Entity,
+  name: string,
+  pos: [number, number, number],
+  colorHex: string,
+  gestures: pc.Entity[],
+  variant: 'man' | 'woman',
+) {
+  const clothes = mat(colorToNumber(colorHex), 0.2);
+  const skin = mat(variant === 'man' ? 0xc08a5e : 0xd2a072, 0.08);
+  const hair = mat(variant === 'man' ? 0x4a3526 : 0x7a5230, 0.04);
+
+  const figure = new pc.Entity(`${name}-body`);
+  figure.setLocalPosition(pos[0], pos[1], pos[2]);
+  parent.addChild(figure);
+
+  const torsoW = variant === 'man' ? 0.34 : 0.29;
+  // torso + rounded shoulders + slim upper arms
+  child(figure, 'box', [0, 0.02, 0], [torsoW, 0.26, 0.15], clothes);
+  child(figure, 'sphere', [-torsoW / 2 + 0.01, 0.13, 0], [0.09, 0.08, 0.09], clothes);
+  child(figure, 'sphere', [torsoW / 2 - 0.01, 0.13, 0], [0.09, 0.08, 0.09], clothes);
+  child(figure, 'box', [-(torsoW / 2 + 0.02), 0.0, 0], [0.06, 0.18, 0.08], clothes).setLocalEulerAngles(0, 0, 7);
+  child(figure, 'box', [torsoW / 2 + 0.02, 0.0, 0], [0.06, 0.18, 0.08], clothes).setLocalEulerAngles(0, 0, -7);
+  // neck + head
+  child(figure, 'cylinder', [0, 0.16, 0], [0.05, 0.08, 0.05], skin);
+  const headY = 0.28;
+  const head = child(figure, 'sphere', [0, headY, 0], variant === 'man' ? [0.15, 0.165, 0.15] : [0.14, 0.155, 0.14], skin);
   head.name = `${name}-head`;
-  const hand = child(parent, 'sphere', [pos[0] + (name === 'driver' ? 0.24 : -0.24), pos[1] + 0.3, pos[2] - 0.04], [0.07, 0.07, 0.07], bodyMat);
-  hand.name = `${name}-gesture`;
+  // ears peeking out (visible from behind, sells "head" instantly)
+  child(figure, 'sphere', [-0.072, headY, 0], [0.032, 0.042, 0.03], skin);
+  child(figure, 'sphere', [0.072, headY, 0], [0.032, 0.042, 0.03], skin);
+
+  if (variant === 'man') {
+    // short crop: rounded cap over the top-back of the skull + a nape patch
+    child(figure, 'sphere', [0, headY + 0.035, 0.022], [0.155, 0.105, 0.15], hair);
+    child(figure, 'sphere', [0, headY - 0.025, 0.055], [0.125, 0.1, 0.055], hair);
+  } else {
+    // long hair: rounded cap + a smooth curtain falling to the shoulder line
+    child(figure, 'sphere', [0, headY + 0.035, 0.015], [0.15, 0.11, 0.145], hair);
+    child(figure, 'sphere', [0, headY - 0.13, 0.062], [0.165, 0.27, 0.07], hair);
+  }
+
+  // raised waving hand + forearm (toggled by gestures)
+  const hand = new pc.Entity(`${name}-gesture`);
+  figure.addChild(hand);
+  const side = name === 'driver' ? 1 : -1; // wave on the inner side, toward the peer
+  const armPart = primitive('forearm', 'cylinder', [side * (torsoW / 2 + 0.06), 0.22, 0], [0.045, 0.22, 0.045], clothes);
+  armPart.setLocalEulerAngles(0, 0, side * -18);
+  hand.addChild(armPart);
+  const palm = primitive('palm', 'sphere', [side * (torsoW / 2 + 0.095), 0.35, 0], [0.055, 0.06, 0.045], skin);
+  hand.addChild(palm);
   hand.enabled = false;
-  gestures.push(body, head, hand);
+
+  gestures.push(figure, head, hand);
 }
 
 function updateCapsuleGestures(gestures: pc.Entity[], driverGesture?: GestureKind | null, passengerGesture?: GestureKind | null) {

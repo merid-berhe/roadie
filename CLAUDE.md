@@ -103,6 +103,13 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 <!-- Most recent at the top. Append new entries above this line. -->
 
+#### 2026-06-10 (later) — Occupants rebuilt as human figures ✅
+- **Completed:** masterRule bumped to v4.5. `createOccupant` rebuilt: man (driver) + woman (passenger) seen from behind — skin-tone head with ears + neck, short-crop vs long-fall hair (rounded ellipsoids, no boxes — boxy hair was the first-attempt failure), shoulders + slim upper arms; rider glyph color moved into clothing so anonymity survives while figures read as people. Wave gesture is now a raised arm + palm beside the head on the peer-facing side. Gesture array contract ([figure, head, hand] ×2) preserved — `Riding.tsx` untouched.
+- **Verified:** typecheck / tests 4/4 / build green; screenshot-judged across coast/desert/mountain/city incl. wave gesture, 3 iterations (boxy hair → cardboard read → floating arm → fixed).
+- **Next:** unchanged from below — user phone review.
+
+---
+
 #### 2026-06-10 — Low-poly art direction: PlayCanvas scene rebuilt + screenshot-verified ✅
 - **Completed:** masterRule bumped to v4.4 — committed flat-shaded low-poly art direction, fully procedural (no GLBs in player path). `PlayCanvasRideScene.tsx` rebuilt: gradient sky dome (vertex-colored custom mesh), per-theme sun/moon disc with tuned additive glow + halo, stars, drifting clouds, faceted vertex-colored terrain (two seamless leapfrogging tiles, per-theme height profiles incl. Big Sur cliff-to-ocean drop and alpine rock/snow bands), static far-silhouette backdrops (mesa/ridge/peaks/skyline), composed props per theme (saguaros with arms, strata mesas, Route-66 telephone poles; wind-swept cypress, guardrail+posts, ocean gradient plane, whitecaps, bobbing sailboats; tiered snow-capped pines, big peaks, boulders, snow patches; window-lit buildings, pagodas, torii gates, glowing street lamps, sidewalks), portrait-first cabin (roof band, A-pillars, mirror, low dash, occupant silhouettes). `ScenePreview` (`?scene=1`) now defaults to PlayCanvas with `engine`/`road`/`t`/`gesture`/`fw` URL params for deterministic headless screenshots. Same component props contract — `Riding.tsx` untouched.
 - **Verified:** typecheck / tests 4/4 / build all green. **Visually judged via headless Chromium screenshots** (the step every earlier visual attempt skipped): all 4 themes portrait, coast landscape, wave gesture, synced firework, late-ride wrap (t=87/95). Iterated 4 rounds (cockpit proportions, sun glow wash-out, palm→cypress, torus steering wheel removed).
