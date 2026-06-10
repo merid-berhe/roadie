@@ -103,6 +103,13 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 <!-- Most recent at the top. Append new entries above this line. -->
 
+#### 2026-06-10 (later still) — Platform flip + Cicada car flattened to the art style ✅
+- **Completed:** masterRule bumped to v4.6 — **desktop browser is now the primary play surface** (mobile Safari/Chrome still must work, no longer the design target). Cicada GLB analysis: 13k tris (already low-poly), 40.3 of 40.9 MB was 7 painted PNGs — the style clash and weight were both the textures. Built `/tmp/glbtool/flatten.mjs` (gltf-transform): stripped all textures, flat-colored the 6 materials by name (retro-red paint, charcoal trim, tinted glass, emissive lamps, ivory chrome), deleted the baked-shadow plane → `app/public/assets/cars/cicada_flat.glb` (**513 KB**). New `?car=1` PlayCanvas sandbox (`CarPreview.tsx`) renders it under the desert-dusk light rig with drag-to-orbit; screenshot-judged front + rear three-quarter — fits the art direction.
+- **Notes:** original 41 MB GLB kept (legacy R3F debug path still references it). Paint color is one hex in the flatten script if a different body color is wanted. Car is not yet placed in the player ride path — candidate uses: arrival beauty shot, lobby/landing visual, third-person exterior camera.
+- **Next:** user phone/desktop review; decide where the car appears in the experience.
+
+---
+
 #### 2026-06-10 (later) — Occupants rebuilt as human figures ✅
 - **Completed:** masterRule bumped to v4.5. `createOccupant` rebuilt: man (driver) + woman (passenger) seen from behind — skin-tone head with ears + neck, short-crop vs long-fall hair (rounded ellipsoids, no boxes — boxy hair was the first-attempt failure), shoulders + slim upper arms; rider glyph color moved into clothing so anonymity survives while figures read as people. Wave gesture is now a raised arm + palm beside the head on the peer-facing side. Gesture array contract ([figure, head, hand] ×2) preserved — `Riding.tsx` untouched.
 - **Verified:** typecheck / tests 4/4 / build green; screenshot-judged across coast/desert/mountain/city incl. wave gesture, 3 iterations (boxy hair → cardboard read → floating arm → fixed).

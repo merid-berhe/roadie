@@ -1,10 +1,10 @@
-# Roadie — Build Spec v4.5 (Production)
+# Roadie — Build Spec v4.6 (Production)
 
 **Status: PRODUCTION BUILD** — MVP validation complete (M0–M6 shipped 2026-06-05). Core loop validated. Now building for quality, not speed. Current production direction: **real-world treasure rides** with a PlayCanvas web-scene spike under evaluation.
 
 **Audience:** the engineer/agent (Claude Code) implementing this.
 **Document type:** opinionated, executable build specification. Stacks are chosen, not suggested.
-**Platform:** mobile-first responsive web (must work in mobile Safari and Chrome; desktop is a bonus, not a target).
+**Platform:** browser-first responsive web (decision 2026-06-10: the **desktop browser is the primary play surface**; the game must still work in mobile Safari and Chrome, but desktop is no longer "a bonus" — frame compositions, asset budgets, and UI density for desktop first, then verify mobile).
 
 ---
 
@@ -549,5 +549,6 @@ If the togetherness signal is strong, layer back in (from the v2 brief, roughly 
 | v4.1 | 2026-06-09 | Real-world treasure ride pivot. Rooms get one curated destination; destination drives scene theme, prompt flavor, arrival context, and treasure persistence. Google Photorealistic 3D Tiles demoted to experimental/debug only for now. | Keeps the essence of real places and music discovery without depending on unusable street-level photogrammetry quality. |
 | v4.2 | 2026-06-09 | Player-facing ride scene switched back to the stylized PixiJS cabin/parallax scene; R3F/tiles remain preview/debug. | The rough 3D car/terrain scene did not look good enough. Better to ship a coherent stylized surface than an incoherent 3D one. |
 | v4.3 | 2026-06-09 | Added PlayCanvas as the default ride-scene spike with PixiJS fallback via `?engine=pixi`. | Test whether a web-first game engine can produce a better responsive ride scene while keeping React/PartyKit/Tone/Supabase intact. |
+| v4.6 | 2026-06-10 | **Platform priority flip: desktop browser is the primary play surface**; mobile Safari/Chrome remain supported, no longer the design target. | User decision. Affects framing (landscape first), asset budgets, and UI density. |
 | v4.5 | 2026-06-10 | Occupants rebuilt as human figures: man (driver) + woman (passenger), skin/hair/ears/arms from primitives, rider glyph color moved into clothing. Wave gesture is a raised arm beside the head. | The glyph-blob occupants (sphere on a box) didn't read as people; co-presence needs human silhouettes. Back view keeps anonymity (no faces). |
 | v4.4 | 2026-06-10 | **Committed art direction: flat-shaded low-poly, fully procedural.** PlayCanvas ride scene rebuilt: gradient sky dome, sun/glow, stars, clouds, faceted seamless-tiling terrain with per-theme height profiles, far-silhouette backdrops, composed theme props (saguaro/mesa/poles, cypress/ocean/sailboats, pines/peaks, lit buildings/pagodas/torii/lamps), portrait-first cabin frame. `?scene=1` preview now drives PlayCanvas (default) with `road`/`t`/`gesture`/`fw` URL params for headless screenshot review. | Previous visual attempts failed because rendered frames were never judged by the agent. Procedural low-poly keeps the bundle tiny, stays art-directable per destination, and screenshots verified all 4 themes + gestures + fireworks + landscape. |
