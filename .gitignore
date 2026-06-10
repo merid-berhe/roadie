@@ -11,3 +11,8 @@ build/
 coverage/
 *.log
 party/.dev.vars
+
+# local working docs — not pushed
+CLAUDE.md
+BACKLOG.md
+masterRule.md
