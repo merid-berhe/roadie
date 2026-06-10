@@ -1,6 +1,8 @@
 // §5 — "two hands on one wheel". Driver controls foundation, passenger controls color.
 // buildPrompt() is deterministic + server-side so the recipe is the canonical record.
 
+import type { Destination } from './destinations';
+
 export type DriverChoices = {
   groove: 'cruising' | 'winding' | 'open-highway';
   tempo: 'slow' | 'medium' | 'brisk';
@@ -51,10 +53,15 @@ export function buildPrompt(
   seedPassenger: string,
   d: DriverChoices,
   p: PassengerChoices,
+  destination?: Destination,
 ): { prompt: string; bpm: number; durationSec: number; recipe: Recipe } {
+  const place = destination
+    ? `${destination.promptFlavor}, inspired by ${destination.name}, ${destination.country}, `
+    : '';
+
   return {
     prompt:
-      `Instrumental, ${seedDriver} + ${seedPassenger} mood, ${d.groove} groove, ` +
+      `Instrumental, ${seedDriver} + ${seedPassenger} mood, ${place}${d.groove} groove, ` +
       `${d.energy} energy, ${p.lead_instrument} lead, ${p.brightness} tone, ${p.texture} texture, ` +
       `relaxing road-trip feel, no vocals`,
     bpm: tempoToBpm(d.tempo),

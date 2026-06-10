@@ -1,6 +1,6 @@
-# Roadie — Build Spec v4.0 (Production)
+# Roadie — Build Spec v4.3 (Production)
 
-**Status: PRODUCTION BUILD** — MVP validation complete (M0–M6 shipped 2026-06-05). Core loop validated. Now building for quality, not speed.
+**Status: PRODUCTION BUILD** — MVP validation complete (M0–M6 shipped 2026-06-05). Core loop validated. Now building for quality, not speed. Current production direction: **real-world treasure rides** with a PlayCanvas web-scene spike under evaluation.
 
 **Audience:** the engineer/agent (Claude Code) implementing this.
 **Document type:** opinionated, executable build specification. Stacks are chosen, not suggested.
@@ -12,7 +12,15 @@
 
 > **When two strangers compose a piece of music together and then ride along to it, does it feel like *we* made something?**
 
-Everything in this spec serves that question. If a feature does not help measure or produce that feeling, it is out of scope (see §2). This is a **validation prototype**, not a launch. Optimize for *learning fast and cheap*, not for scale, polish, or revenue. Treat instrumentation (§13) as a first-class feature, not an afterthought — the prototype is worthless if we can't read the result.
+Everything in this spec serves that question. The v4.1 product frame adds a second, supporting loop: the pair rides to a real place, leaves the co-created song there as a treasure, and future players can discover that music while learning about the place. If a feature does not support co-creation, place memory, discovery, or measurement, it is out of scope (see §2). This is still a validation prototype, not a launch. Optimize for learning fast and cheap, not for scale, polish, or revenue. Treat instrumentation (§13) as a first-class feature, not an afterthought — the prototype is worthless if we can't read the result.
+
+### 0a. Real-world treasure ride decision
+
+- Each ride room is assigned **one real destination** from a curated destination seed list. Both riders see the same place.
+- The destination drives the visual theme (`desert | coast | mountain | city`), the music prompt flavor, arrival context, and treasure persistence.
+- The scene should feel like a ride through the destination's atmosphere, not a literal 1:1 map reconstruction.
+- After arrival, the co-named song is saved to the riders' Gloveboxes and dropped as a **treasure** at the destination coordinates for future discovery.
+- Google Photorealistic 3D Tiles are an experimental reference/debug path only. They are not the production ride surface until they can produce readable street-level roads on mobile.
 
 ---
 
@@ -23,9 +31,10 @@ A single playthrough, called a **ride**:
 1. **Get in the car (audio unlock + identity).** User opens a link, taps a single "Get in" control. That tap (a) unlocks the Web Audio context — mandatory on iOS Safari, see §11 — and (b) establishes an anonymous-persistent identity (§6). Engine idle hum begins.
 2. **Pairing.** Two users are placed in the same room. For validation we primarily use **invite-link pairing** (two recruited testers join the same room code) and a simple FIFO **random queue** as secondary. See §10.
 3. **Compose together (the lobby).** Before the car moves, the two riders — assigned fixed roles **Driver** and **Passenger** — make a short, *visible, turn-aware* set of choices that together define the song. Each rider controls different musical dimensions ("two hands on one wheel," §7). They can see each other's choices land. When both tap **"Let's drive,"** generation fires.
+   The room also shows the shared destination: a real place with a short fact and a scene theme.
 4. **Tuning the radio (latency mask — critical).** Generation takes ~10–30s. During this, the car pulls out, scenery starts, a **procedural ambient bed plays instantly** (Tone.js), and the **live gesture layer is already active** so the two can wave/react while they wait. When the generated track arrives, crossfade the bed into it ("the radio tuning in"). The rider must **never** sit in silent dead air with a stranger.
 5. **The ride (~2 min, listen + light presence).** The generated song plays, synced for both. Scenery scrolls. The riders are mostly listening together, with a *thin* layer of live interaction: reskinned warm reactions, beat-locked sound flourishes, and a co-launched firework finale (§8).
-6. **Arrival (keepsake + rate).** The song resolves. Riders co-name it (each contributes a word, or one names + other taps approve). The track is saved to the **Glovebox** with both anonymous contributor glyphs and the road/date. Then a short post-ride rating (positive tokens + a separate "something went wrong" path) and **one validation question** (§13).
+6. **Arrival (treasure + keepsake + rate).** The song resolves at the assigned destination. Riders co-name it (each contributes a word, or one names + other taps approve). The track is saved to the **Glovebox** with both anonymous contributor glyphs and the destination, and a public **treasure** record is dropped at the destination coordinates. Then a short post-ride rating (positive tokens + a separate "something went wrong" path) and **one validation question** (§13).
 
 ---
 
@@ -34,8 +43,10 @@ A single playthrough, called a **ride**:
 ### In scope (build this)
 - Anonymous-persistent identity (device-based, no PII).
 - Invite-link + simple random pairing for exactly **2 players**.
-- One road / one scenery theme.
+- One room-assigned destination / one derived scenery theme per ride.
 - Lobby composition UI with the Driver/Passenger split.
+- Room-assigned real destination from a curated seed list.
+- Destination-aware music prompt, scene theme, arrival context, and treasure drop.
 - Front-loaded **single-call AI music generation** (instrumental).
 - Procedural ambient bed + crossfade to generated track.
 - Synced two-player playback with a server-authoritative clock.
@@ -45,7 +56,7 @@ A single playthrough, called a **ride**:
 - Full instrumentation/analytics.
 
 ### Explicitly OUT of scope (deferred — see the v2 brief)
-Monetization, subscriptions, payments, cosmetics shop, scene selection, multiple roads, community "Radio" library, gifts/collectibles, real-time/live AI mixing, vocals + lyric moderation, email/social accounts, full reputation-gated matchmaking, bots/solo mode, internationalization. **Do not build these.** If a shortcut now would block one later, leave a `// DEFERRED:` note, but build the prototype.
+Monetization, subscriptions, payments, cosmetics shop, user scene selection, multiple simultaneous route systems, literal street-level map accuracy, community "Radio" library, gifts/collectibles, real-time/live AI mixing, vocals + lyric moderation, email/social accounts, full reputation-gated matchmaking, bots/solo mode, internationalization. **Do not build these.** If a shortcut now would block one later, leave a `// DEFERRED:` note, but build the prototype.
 
 ---
 
@@ -96,7 +107,7 @@ Monetization, subscriptions, payments, cosmetics shop, scene selection, multiple
 | Styling | **Tailwind CSS** | Fast iteration; keep it minimal, this is a prototype. |
 | Game state | **Zustand** | Tiny, no boilerplate; good for fast-changing local state. |
 | Audio | **Tone.js** (over Web Audio API) | Needs beat-synced scheduling (gesture sounds snap to tempo) + an ambient bed + transport clock. Tone.js is built exactly for this. Use a plain `<audio>`/`AudioBufferSourceNode` for the generated track, wired into Tone's context. |
-| Scenery + FX | **Three.js + @react-three/fiber** (WebGL 3D) | Production decision (2026-06-06): PixiJS 2D parallax validated the loop but horizontal scroll reads as sideways motion. 3D is the right medium — proper back-seat POV, GLB car interior assets load natively, forward road perspective is real not faked, 4 scene themes rendered in actual 3D space. R3F gives React-native integration with clean component model. |
+| Scenery + FX | **PlayCanvas spike for the player ride; PixiJS fallback; Three.js/R3F experimental** | Decision update (2026-06-09): the rough 3D GLB/tile route damaged the experience, and hand-built R3F scene design is not producing quality fast enough. PlayCanvas is now the default ride-scene spike because it is web-first and embeddable. PixiJS remains available with `?engine=pixi`; R3F remains preview/debug for car, model, and map experiments. |
 | Realtime / rooms | **PartyKit** (Cloudflare Durable Objects) | Purpose-built for "one stateful server per room" with authoritative logic — ideal for clock, gesture relay, and the firework window. Cheap on Cloudflare. **Fallback:** a small Node + `ws` server on Fly.io/Railway, or raw Durable Objects. *(Verify PartyKit's current status at build time; if changed, use the fallback — the architecture is identical: one authoritative WS room server.)* |
 | Auth + DB + Storage | **Supabase** | One vendor covers Anonymous Auth, Postgres, and file Storage with a generous free tier. Minimizes ops. |
 | Music generation | **fal.ai → MiniMax Music v2.5** (instrumental) | **$0.15/generation** (confirmed 2026-06-08 from actual billing). Behind a `MusicGenerator` adapter so providers swap without touching the room server. Alternatives evaluated: Suno — no official API (resellers only, §19 risk); **Google Lyria 2** — now available on fal.ai at $0.10/30s (~$0.40 for 2-min track, ~3× MiniMax), commercial licensing murky (Google Preview Product terms restrict production use without written permission). Keep Lyria 2 as quality upgrade candidate once licensing is clarified. |
@@ -128,10 +139,11 @@ Keep each set to **3 choices of ~3 options** — small enough to finish in ~45�
 **Mapping function (server-side, deterministic):**
 
 ```ts
-function buildPrompt(seedDriver: string, seedPassenger: string, d: DriverChoices, p: PassengerChoices) {
+function buildPrompt(seedDriver: string, seedPassenger: string, d: DriverChoices, p: PassengerChoices, destination: Destination) {
   return {
     // human-readable prompt sent to the generator
-    prompt: `Instrumental, ${seedDriver} + ${seedPassenger} mood, ${d.groove} groove, `
+    prompt: `Instrumental, ${seedDriver} + ${seedPassenger} mood, ${destination.promptFlavor}, `
+          + `inspired by ${destination.name}, ${destination.country}, ${d.groove} groove, `
           + `${d.energy} energy, ${p.lead_instrument} lead, ${p.brightness} tone, ${p.texture} texture, `
           + `relaxing road-trip feel, no vocals`,
     bpm: tempoToBpm(d.tempo),          // slow≈72, medium≈92, brisk≈112
@@ -160,9 +172,15 @@ function buildPrompt(seedDriver: string, seedPassenger: string, d: DriverChoices
 
 ## 7. Visual production & scene architecture
 
-**Engine (production): Three.js + @react-three/fiber (R3F)** — replaced PixiJS 2D (2026-06-06). PixiJS was correct for MVP validation speed; 3D is correct for production quality. R3F integrates natively with React, GLB/glTF assets load directly, and the back-seat POV is a real 3D camera rather than a 2D illusion.
+**Engine spike (current default ride renderer): PlayCanvas.** Decision update (2026-06-09): Roadie remains web + responsive, but scene authoring needs a real web game engine. The normal ride screen now defaults to a PlayCanvas spike: custom ride capsule/cockpit, authored low-poly road/world props, destination themes, rider-color occupants, gesture markers, and firework particles. This is a test of engine fit, not a final art direction.
+
+**PixiJS fallback:** the cleaner flat vector cabin/parallax scene remains available with `?engine=pixi`.
+
+**Three.js + @react-three/fiber status:** experimental/preview only for now. Keep it available for model inspection, future 3D art direction, and map/tile research, but do not route normal players through the rough 3D ride until the car, camera, road, occupants, and environment reach a coherent style.
 
 **Visual model: 3D back-seat POV.** Camera positioned in the rear of a car interior (loaded as GLB), looking forward through the windshield. The world moves toward the camera. Four scene themes (Desert/Route 66, Coast, Mountain Pass, Night City), each with procedural 3D geometry as placeholder and slots for real 3D assets. Do NOT use Unity or Godot — keep everything in the React/TS/Three.js stack for instant-web mobile loading.
+
+**Destination rendering decision (2026-06-09): stylized place, not literal map.** Google Photorealistic 3D Tiles looked impressive from above but failed the ride use case at street level: low readable road quality, heavy geometry, car placement/altitude mismatch, and frequent building/tree occlusion. Keep that code path as an experimental reference/debug preview only. Production ride scenes should use the room destination as metadata and art direction: `destination.theme` picks the scene family, `destination.promptFlavor` colors the music prompt, and `destination.fact`/source become arrival and discovery content. The scene should evoke the place enough to preserve the game idea while staying performant and art-directable on mobile.
 
 ### Camera & composition (back-seat POV)
 A **single shared third-person camera in the back seat**, looking forward. Both players see the same view: two front-seat occupants, the windshield ahead, and a side window on each side. (Note: this is third-person "a portrait of the two of us," not first-person — chosen deliberately to maximize the sense of *co-presence*, which is the thing the prototype is validating.)
@@ -278,7 +296,7 @@ track_swapped (from: borrowed, to: own, at_position_sec),
 gesture_sent (type, sender_glyph),
 firework_attempted, firework_synced (bool),
 ride_completed | ride_abandoned (at_position_sec, reason: user_left | socket_closed),
-song_named, song_saved, song_replayed,
+song_named, song_saved, treasure_dropped, treasure_failed, song_replayed,
 no_song_saved (reason: borrowed_finish | generation_failed),  # see §16
 rating_submitted (tokens[]), report_submitted,
 survey_answer (the one question below)
@@ -311,9 +329,26 @@ create table users (
   created_at timestamptz default now()
 );
 
+create table destinations (
+  id text primary key,                  -- stable curated id, e.g. big-sur-ca
+  name text not null,
+  country text not null,
+  region text not null,
+  lat double precision not null,
+  lon double precision not null,
+  theme text not null,                  -- desert|coast|mountain|city
+  tags text[],
+  fact text not null,
+  fact_source_title text not null,
+  fact_source_url text not null,
+  prompt_flavor text not null,
+  created_at timestamptz default now()
+);
+
 create table rides (
   id uuid primary key,
   room_code text,
+  destination_id text references destinations(id),
   driver_id uuid references users(id),
   passenger_id uuid references users(id),
   status text,                          -- composing|generating|riding|completed|abandoned
@@ -325,11 +360,27 @@ create table rides (
 create table songs (
   id uuid primary key,
   ride_id uuid references rides(id),
+  destination_id text references destinations(id),
   audio_url text not null,              -- Supabase Storage
   title text,
   recipe jsonb,                         -- for per-rider attribution
   contributor_glyphs text[],            -- ['▲','●']
   road text default 'coast',
+  created_at timestamptz default now()
+);
+
+create table treasures (
+  id uuid primary key,
+  song_id uuid references songs(id),
+  destination_id text references destinations(id),
+  title text,
+  lat double precision not null,
+  lon double precision not null,
+  contributor_glyphs text[],
+  recipe jsonb,
+  fact_snapshot text,
+  source_title_snapshot text,
+  source_url_snapshot text,
   created_at timestamptz default now()
 );
 
@@ -354,7 +405,7 @@ create table events ( -- if not using PostHog
   created_at timestamptz default now()
 );
 ```
-Apply Row Level Security so a user can only read their own Glovebox.
+Apply Row Level Security so a user can only read their own Glovebox. `destinations` and `treasures` are public read models for discovery; `songs` are public-readable only when reachable from a treasure, otherwise only via the user's Glovebox.
 
 ---
 
@@ -373,7 +424,7 @@ type ClientMsg =
   | { t: 'report' };
 
 type RoomMsg =
-  | { t: 'state'; phase: 'lobby'|'generating'|'riding'|'arrival'; ... }
+  | { t: 'state'; phase: 'lobby'|'generating'|'riding'|'arrival'; destination: Destination; ... }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
   // ride can start on the pair's own track OR a borrowed one under load (§16)
   | { t: 'rideStart'; audioUrl: string; source: 'own'|'borrowed'; rideStartAt: number; bpm: number }
@@ -446,7 +497,7 @@ The "departure windows" liquidity idea (batching starts to manufacture density, 
 ```
 /app            # React+Vite client
   /audio        # Tone.js engine, procedural bed, beat-quantized gestures
-  /scene        # PixiJS scenery + fireworks
+  /scene        # PlayCanvas spike, PixiJS fallback, destination themes, experimental R3F/tile preview
   /state        # Zustand stores
   /screens      # GetIn, Lobby/Compose, Ride, Arrival, Glovebox
   /net          # PartyKit client, clock offset, reconnection
@@ -493,5 +544,8 @@ If the togetherness signal is strong, layer back in (from the v2 brief, roughly 
 |---|---|---|---|
 | v3 | 2026-06-05 | Initial import of build spec | Canonical source of truth established |
 | v3.1 | 2026-06-05 | Ride 6–8 min → ~2 min; MiniMax via fal.ai confirmed. | See entry. |
+| v3.2 | 2026-06-06 | Art direction: clean vector/SVG (Florence-style). 4 scenes, driver picks. | Superseded by v4.0 Three.js decision same day. |
 | v4.0 | 2026-06-06 | **Production build begins.** Spec version bumped from v3.x (MVP prototype) to v4.0. Scene engine: **PixiJS 2D → Three.js + R3F**. Back-seat POV is a real 3D camera; 4 scene themes in 3D; GLB car interior assets load natively. Audio validated and works; visual quality is now the priority. | MVP loop validated — togetherness feeling confirmed. Now building for real users. |
-| v3.2 | 2026-06-06 | Art direction: **clean vector/SVG (Florence-style)**. 4 scenes, driver picks. | Superseded by v4.0 Three.js decision same day. | Ride length 6–8 min → **~2 min**; generation target `durationSec` 420 → 120; confirmed **MiniMax via fal.ai** behind the `MusicGenerator` adapter; §16 swap-window numbers rescaled; Suno noted as deferred upgrade (no official API). | Shorter ride fits MiniMax in one official single call (no looping/borrowed-track gymnastics), keeps cost ~$0.035/ride & official-provider swappability (§19), and likely improves completion + togetherness signal (§13). Decided with user. |
+| v4.1 | 2026-06-09 | Real-world treasure ride pivot. Rooms get one curated destination; destination drives scene theme, prompt flavor, arrival context, and treasure persistence. Google Photorealistic 3D Tiles demoted to experimental/debug only for now. | Keeps the essence of real places and music discovery without depending on unusable street-level photogrammetry quality. |
+| v4.2 | 2026-06-09 | Player-facing ride scene switched back to the stylized PixiJS cabin/parallax scene; R3F/tiles remain preview/debug. | The rough 3D car/terrain scene did not look good enough. Better to ship a coherent stylized surface than an incoherent 3D one. |
+| v4.3 | 2026-06-09 | Added PlayCanvas as the default ride-scene spike with PixiJS fallback via `?engine=pixi`. | Test whether a web-first game engine can produce a better responsive ride scene while keeping React/PartyKit/Tone/Supabase intact. |

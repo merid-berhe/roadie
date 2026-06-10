@@ -237,7 +237,7 @@ function SceneContent({ road, positionSec, driverColor, passengerColor, driverGe
   }[road];
 
   const lightColor = road === 'desert' ? '#ffcc88' : '#ffffff';
-  const lightIntensity = road === 'city' ? 0.6 : 1.8;
+  const lightIntensity = road === 'city' ? 1.0 : 2.0;
 
   return (
     <>
@@ -245,7 +245,7 @@ function SceneContent({ road, positionSec, driverColor, passengerColor, driverGe
       <ambientLight intensity={road === 'city' ? 1.2 : 2.5} />
       <directionalLight
         position={[4, 6, 2]}
-        intensity={road === 'city' ? 1.0 : 2.0}
+        intensity={lightIntensity}
         color={lightColor}
       />
 

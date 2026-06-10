@@ -6,7 +6,6 @@ import {
   type DriverChoices,
   type PassengerChoices,
 } from '@roadie/shared';
-import { ROADS, type RoadId } from '../scene/scenes';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
@@ -18,12 +17,12 @@ export default function Compose() {
   const riders = useRoom((s) => s.riders);
   const seeded = useRoom((s) => s.seeded);
   const readyRoles = useRoom((s) => s.readyRoles);
+  const destination = useRoom((s) => s.destination);
   const peerChoices = useRoom((s) => s.peerChoices);
   const send = useRoom((s) => s.send);
 
   const [ownSeed, setOwnSeed]     = useState<string | null>(null);
   const [ownChoices, setOwnChoices] = useState<AnyChoices>({});
-  const [ownRoad, setOwnRoad]     = useState<RoadId>('desert');
   const [isReady, setIsReady]     = useState(false);
 
   const peer = riders.find((r) => r.role !== you);
@@ -47,11 +46,6 @@ export default function Compose() {
   function pickSeed(word: string) {
     setOwnSeed(word);
     send({ t: 'seed', word });
-  }
-
-  function pickRoad(roadId: RoadId) {
-    setOwnRoad(roadId);
-    if (you === 'driver') send({ t: 'road', roadId });
   }
 
   function pickChoice(field: string, value: string) {
@@ -80,6 +74,17 @@ export default function Compose() {
         </div>
       </div>
 
+      {destination && (
+        <Section title="TODAY'S DESTINATION">
+          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
+            <p className="text-lg font-semibold text-white">{destination.name}</p>
+            <p className="text-sm text-white/45">{destination.region}, {destination.country}</p>
+            <p className="mt-3 text-sm leading-6 text-white/65">{destination.fact}</p>
+            <p className="mt-3 text-xs uppercase tracking-wider text-white/30">{destination.theme} road</p>
+          </div>
+        </Section>
+      )}
+
       {/* Mood seed */}
       <Section title="PICK A MOOD">
         <div className="grid grid-cols-2 gap-2">
@@ -100,29 +105,6 @@ export default function Compose() {
           <p className="mt-2 text-xs text-white/30">waiting for co-rider's mood…</p>
         )}
       </Section>
-
-      {/* Road selection — driver only (§ backlog 1b) */}
-      {you === 'driver' && (
-        <Section title="PICK YOUR ROAD">
-          <div className="grid grid-cols-2 gap-2">
-            {ROADS.map((r) => (
-              <ChoiceButton
-                key={r.id}
-                label={`${r.emoji} ${r.label}`}
-                selected={ownRoad === r.id}
-                color={identity?.color}
-                onSelect={() => pickRoad(r.id)}
-              />
-            ))}
-          </div>
-        </Section>
-      )}
-      {you === 'passenger' && peerChoices['__road'] && (
-        <p className="mb-4 text-xs text-white/40">
-          co-rider picked the road: {ROADS.find(r => r.id === peerChoices['__road'])?.emoji}{' '}
-          {ROADS.find(r => r.id === peerChoices['__road'])?.label}
-        </p>
-      )}
 
       {/* Own role choices */}
       <Section title={roleLabel}>

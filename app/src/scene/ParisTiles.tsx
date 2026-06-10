@@ -1,35 +1,79 @@
 // Google Photorealistic 3D Tiles — Paris proof of concept.
-// GlobeControls for Earth-scale navigation, locked to Paris area.
+// Requires VITE_GOOGLE_MAPS_KEY in app/.env.local with Map Tiles API enabled.
 
-import { useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-// @ts-ignore
-import { TilesRenderer, TilesPlugin, GlobeControls } from '3d-tiles-renderer/r3f';
+import { Suspense, useContext, useMemo, useRef, type ReactNode, type RefObject } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Html, useGLTF } from '@react-three/drei';
+import {
+  SettledObject,
+  SettledObjects,
+  TilesAttributionOverlay,
+  TilesPlugin,
+  TilesRenderer,
+  TilesRendererContext,
+} from '3d-tiles-renderer/r3f';
 import { GoogleCloudAuthPlugin } from '3d-tiles-renderer/plugins';
+import * as THREE from 'three';
 
-// ECEF position above Notre Dame at ~300m altitude (good starting view of Paris)
-const R_SURFACE = 6_371_381; // Earth radius + ~380m at Paris lat (terrain ~81m + 300m)
-const LAT = 48.853 * Math.PI / 180;
-const LON = 2.350  * Math.PI / 180;
+const DEG = Math.PI / 180;
+const WGS84_A = 6_378_137;
+const WGS84_E2 = 6.69437999014e-3;
 
-const PARIS_300M: [number, number, number] = [
-  R_SURFACE * Math.cos(LAT) * Math.cos(LON),
-  R_SURFACE * Math.cos(LAT) * Math.sin(LON),
-  R_SURFACE * Math.sin(LAT),
-];
+export type ParisAnchorId = 'champs-elysees' | 'concorde';
 
-// Distance from Earth center — used to lock zoom range
-// Paris surface ≈ 6,371,081m from center (terrain ~81m above ellipsoid)
-const EARTH_R_PARIS  = 6_371_081;
-const MIN_DIST       = EARTH_R_PARIS + 3;     // 3m above ground — street level
-const MAX_DIST       = EARTH_R_PARIS + 1_000; // 1km max — neighbourhood scale
+export const PARIS_TILE_ANCHORS: Record<ParisAnchorId, {
+  label: string;
+  latDeg: number;
+  lonDeg: number;
+  initialCameraHeightM: number;
+  headingDeg: number;
+}> = {
+  // Coordinates from latlong.net's Champs-Élysées entry. This is a wider road
+  // corridor than Concorde and is a better default for car placement.
+  'champs-elysees': {
+    label: 'Champs-Élysées',
+    latDeg: 48.870502,
+    lonDeg: 2.304897,
+    initialCameraHeightM: 60,
+    headingDeg: 295,
+  },
+  // Previous proof-of-concept anchor. Kept for comparison/debugging.
+  concorde: {
+    label: 'Concorde',
+    latDeg: 48.86563,
+    lonDeg: 2.32124,
+    initialCameraHeightM: 52,
+    headingDeg: 84,
+  },
+};
 
-type Props = { positionSec: number; rideDuration?: number };
+const WORLD_SPEED_MPS = 3.2;
+const DEFAULT_CAR_LIFT_M = 0.65;
+const CAR_CAMERA_LOCAL = new THREE.Vector3(0.05, 1.25, 0);
+const CAR_TARGET_LOCAL = new THREE.Vector3(-8, 1.05, 0);
+const UP_PROBE_LOCAL = new THREE.Vector3(0.05, 2.25, 0);
 
-export default function ParisTiles({ positionSec: _positionSec }: Props) {
+type Props = {
+  anchorId?: ParisAnchorId;
+  positionSec: number;
+  rideDuration?: number;
+  headingDeg?: number;
+  liftM?: number;
+  pixelRatio?: number;
+};
+
+export default function ParisTiles({
+  anchorId = 'champs-elysees',
+  positionSec,
+  headingDeg,
+  liftM = DEFAULT_CAR_LIFT_M,
+  pixelRatio = 1,
+}: Props) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const controlsRef = useRef<any>(null);
+  const anchor = PARIS_TILE_ANCHORS[anchorId];
+  const lat = anchor.latDeg * DEG;
+  const lon = anchor.lonDeg * DEG;
+  const resolvedHeadingDeg = headingDeg ?? anchor.headingDeg;
 
   if (!apiKey) {
     return (
@@ -44,51 +88,148 @@ export default function ParisTiles({ positionSec: _positionSec }: Props) {
     );
   }
 
-  function nudge(delta: number) {
-    // Zoom in/out by adjusting camera distance from Earth center
-    if (!controlsRef.current) return;
-    const ctrl = controlsRef.current;
-    ctrl.zoomDelta?.(delta);
-  }
+  const initialCamera = ecefFromCartographic(lat, lon, anchor.initialCameraHeightM);
 
   return (
-    <div className="absolute inset-0">
-      <Canvas
-        camera={{ position: PARIS_300M, fov: 70, near: 1, far: 1e8 }}
-        onCreated={({ camera }) => { camera.lookAt(0, 0, 0); }}
-        gl={{ antialias: true, logarithmicDepthBuffer: true }}
-        style={{ position: 'absolute', inset: 0 }}
-      >
-        <ambientLight intensity={3} />
-        <directionalLight position={[1, 2, 1]} intensity={2} />
+    <Canvas
+      camera={{
+        position: initialCamera.toArray(),
+        fov: 72,
+        near: 1,
+        far: 1e8,
+      }}
+      dpr={Math.max(1, pixelRatio)}
+      gl={{ antialias: true, logarithmicDepthBuffer: true }}
+      style={{ position: 'absolute', inset: 0 }}
+    >
+      <ambientLight intensity={3} />
+      <directionalLight position={[1, 2, 1]} intensity={2} />
 
-        <TilesRenderer errorTarget={2} maxCachedBytes={300 * 1024 * 1024}>
-          <TilesPlugin plugin={GoogleCloudAuthPlugin} args={[{ apiToken: apiKey }] as any} />
-          <GlobeControls
-            ref={controlsRef}
-            enableDamping
-            zoomSpeed={5}
+      <TilesRenderer errorTarget={1}>
+        <TilesPlugin plugin={GoogleCloudAuthPlugin} args={[{ apiToken: apiKey, useRecommendedSettings: false }]} />
+        <TilesAttributionOverlay
+          style={{
+            bottom: 8,
+            color: 'white',
+            fontSize: 11,
+            left: 8,
+            opacity: 0.75,
+            position: 'absolute',
+            textShadow: '0 1px 2px #000',
+          }}
+        />
+        <TileSurfaceQueries>
+          <SettledObject
+            lat={lat}
+            lon={lon}
+            component={<group><StreetRoadieCar positionSec={positionSec} headingDeg={resolvedHeadingDeg} liftM={liftM} /></group>}
           />
-        </TilesRenderer>
-      </Canvas>
-
-      {/* Navigation overlay */}
-      <div className="pointer-events-auto absolute right-4 top-1/2 flex -translate-y-1/2 flex-col gap-2">
-        <button
-          onClick={() => nudge(-50)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-lg text-white hover:bg-black/80"
-          title="Zoom in"
-        >+</button>
-        <button
-          onClick={() => nudge(50)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-lg text-white hover:bg-black/80"
-          title="Zoom out"
-        >−</button>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-4 py-1 text-xs text-white/50">
-        scroll to zoom · drag to look · locked to Paris neighbourhood
-      </div>
-    </div>
+        </TileSurfaceQueries>
+      </TilesRenderer>
+    </Canvas>
   );
 }
+
+function TileSurfaceQueries({ children }: { children: ReactNode }) {
+  const tiles = useContext(TilesRendererContext);
+  return <SettledObjects scene={tiles ? tiles.group : []}>{children}</SettledObjects>;
+}
+
+function StreetRoadieCar({
+  positionSec,
+  headingDeg,
+  liftM,
+}: {
+  positionSec: number;
+  headingDeg: number;
+  liftM: number;
+}) {
+  const carRef = useRef<THREE.Group>(null);
+  const headingRad = headingDeg * DEG;
+  const carQuaternion = useMemo(() => carQuaternionForHeading(headingRad), [headingRad]);
+  const pathPosition = useMemo(() => streetPathPosition(positionSec, headingRad, liftM), [positionSec, headingRad, liftM]);
+
+  useStreetCamera(carRef);
+
+  return (
+    <>
+      <group
+        ref={carRef}
+        position={pathPosition}
+        quaternion={carQuaternion}
+      >
+        <Suspense fallback={<Html center><p className="text-white text-xs">loading car…</p></Html>}>
+          <CicadaCar />
+        </Suspense>
+      </group>
+
+      <mesh position={[0, 0.04, 0]}>
+        <cylinderGeometry args={[0.35, 0.35, 0.04, 32]} />
+        <meshBasicMaterial color="#f5a623" transparent opacity={0.5} />
+      </mesh>
+    </>
+  );
+}
+
+function CicadaCar() {
+  const { scene } = useGLTF('/assets/cars/cicada_retro_cartoon_car.glb');
+  return <primitive object={scene} />;
+}
+
+function useStreetCamera(carRef: RefObject<THREE.Group | null>) {
+  const { camera } = useThree();
+  const cameraWorld = useMemo(() => new THREE.Vector3(), []);
+  const targetWorld = useMemo(() => new THREE.Vector3(), []);
+  const upWorld = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame(() => {
+    const car = carRef.current;
+    if (!car) return;
+
+    cameraWorld.copy(CAR_CAMERA_LOCAL);
+    targetWorld.copy(CAR_TARGET_LOCAL);
+    upWorld.copy(UP_PROBE_LOCAL);
+
+    car.localToWorld(cameraWorld);
+    car.localToWorld(targetWorld);
+    car.localToWorld(upWorld);
+
+    camera.position.copy(cameraWorld);
+    camera.up.copy(upWorld.sub(cameraWorld).normalize());
+    camera.lookAt(targetWorld);
+    camera.updateMatrixWorld();
+  });
+}
+
+function streetPathPosition(positionSec: number, headingRad: number, liftM: number): [number, number, number] {
+  const meters = positionSec * WORLD_SPEED_MPS;
+  const east = Math.sin(headingRad) * meters;
+  const north = Math.cos(headingRad) * meters;
+  return [east, liftM, north];
+}
+
+function carQuaternionForHeading(headingRad: number): THREE.Quaternion {
+  const forward = new THREE.Vector3(Math.sin(headingRad), 0, Math.cos(headingRad)).normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+
+  const xAxis = forward.clone().multiplyScalar(-1);
+  const yAxis = up;
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
+
+  const matrix = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+  return new THREE.Quaternion().setFromRotationMatrix(matrix);
+}
+
+function ecefFromCartographic(lat: number, lon: number, heightM: number): THREE.Vector3 {
+  const sinLat = Math.sin(lat);
+  const cosLat = Math.cos(lat);
+  const radius = WGS84_A / Math.sqrt(1 - WGS84_E2 * sinLat * sinLat);
+
+  return new THREE.Vector3(
+    (radius + heightM) * cosLat * Math.cos(lon),
+    (radius + heightM) * cosLat * Math.sin(lon),
+    (radius * (1 - WGS84_E2) + heightM) * sinLat,
+  );
+}
+
+useGLTF.preload('/assets/cars/cicada_retro_cartoon_car.glb');

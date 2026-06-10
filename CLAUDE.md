@@ -103,6 +103,12 @@ Update this at the *end* of every session. If a session ends without an entry, t
 
 <!-- Most recent at the top. Append new entries above this line. -->
 
+#### 2026-06-09 — Real-world treasure ride pivot
+- **Completed:** masterRule bumped to v4.3 with the real-world treasure ride decision and PlayCanvas scene spike: rooms get one curated destination; scenes are stylized/place-inspired, not literal Google tile street reconstructions; Google Photorealistic 3D Tiles and rough R3F car/terrain stay experimental/debug for now. Added shared destination contract + curated seed list (`shared/src/destinations.ts`), PartyKit room destination assignment, destination-aware generation prompt, Zustand destination projection, Compose/Generating/Riding/Arrival/Glovebox destination UI, Supabase `destinations` + `treasures` schema/RLS/seed data, treasure save events, destination prompt tests, switched normal rides away from rough R3F, then added PlayCanvas as the default ride renderer with Pixi fallback via `?engine=pixi`.
+- **Verified:** `npm run typecheck`, `npm test`, `npm run build` all pass. Build still reports the existing Vite large-chunk warning.
+- **In flight:** PlayCanvas spike is functional but not visually judged in-browser by the agent. no discovery/map UI yet; treasures are persisted/read-model-ready but not browsed by players. Google tile preview, Pixi fallback, and R3F car scene remain local experimental work.
+- **Next:** user visual review of PlayCanvas ride. If direction is promising, create one polished destination scene/art kit; if not, try Godot web export spike before investing further.
+
 ---
 
 #### 2026-06-07 — Production scene work: Three.js, terrain, characters (parked)

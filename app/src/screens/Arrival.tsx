@@ -11,6 +11,7 @@ export default function Arrival({ onDone }: Props) {
   const riders    = useRoom((s) => s.riders);
   const recipe    = useRoom((s) => s.recipe);
   const audioUrl  = useRoom((s) => s.audioUrl);
+  const destination = useRoom((s) => s.destination);
   const send      = useRoom((s) => s.send);
   const peerNameWord = useRoom((s) => s.peerNameWord);
 
@@ -39,22 +40,58 @@ export default function Arrival({ onDone }: Props) {
     const glyphs = [driver?.glyph, passenger?.glyph].filter(Boolean) as string[];
     const { data: song, error } = await supabase
       .from('songs')
-      .insert({ audio_url: audioUrl, title, recipe, contributor_glyphs: glyphs, road: 'coast' })
+      .insert({
+        audio_url: audioUrl,
+        title,
+        recipe,
+        contributor_glyphs: glyphs,
+        road: destination?.theme ?? 'coast',
+        destination_id: destination?.id ?? null,
+      })
       .select('id')
       .single();
 
     if (error || !song) { setSaving(false); onDone(null); return; }
 
+    if (destination) {
+      const { error: treasureError } = await supabase.from('treasures').insert({
+        song_id: song.id,
+        destination_id: destination.id,
+        title,
+        lat: destination.lat,
+        lon: destination.lon,
+        contributor_glyphs: glyphs,
+        recipe,
+        fact_snapshot: destination.fact,
+        source_title_snapshot: destination.factSourceTitle,
+        source_url_snapshot: destination.factSourceUrl,
+      });
+      if (treasureError) {
+        console.warn('[treasure]', treasureError.message);
+        track('treasure_failed', { song_id: song.id, destination_id: destination.id, reason: treasureError.message });
+      } else {
+        track('treasure_dropped', { song_id: song.id, destination_id: destination.id });
+      }
+    }
+
     // Add a glovebox entry for each rider (both userIds stored in the ride row — best effort here)
     await supabase.from('glovebox_entries').insert({ user_id: userId, song_id: song.id });
 
-    track('song_saved', { title, song_id: song.id });
+    track('song_saved', { title, song_id: song.id, destination_id: destination?.id });
     onDone(song.id);
   }
 
   return (
     <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-[#0b1020] px-6 text-center text-white">
       <p className="text-sm uppercase tracking-widest text-white/40">you've arrived</p>
+
+      {destination && (
+        <div className="max-w-sm">
+          <p className="text-2xl font-semibold">{destination.name}</p>
+          <p className="mt-1 text-sm text-white/45">{destination.region}, {destination.country}</p>
+          <p className="mt-4 text-sm leading-6 text-white/65">{destination.fact}</p>
+        </div>
+      )}
 
       {/* Attribution — §5: "we made this together" legible after the fact */}
       {recipe && (

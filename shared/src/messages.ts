@@ -2,6 +2,7 @@
 // Room is single source of truth (§3). Peer is only ever described by glyph+role (§6).
 
 import type { Recipe } from './recipe';
+import type { Destination } from './destinations';
 
 export type Role = 'driver' | 'passenger';
 export type Phase = 'lobby' | 'generating' | 'riding' | 'arrival';
@@ -18,7 +19,7 @@ export type Rider = {
 export type ClientMsg =
   | { t: 'join'; userId: string; glyph: string; color: string }
   | { t: 'seed'; word: string }
-  | { t: 'road'; roadId: string }  // driver picks scene before ride
+  | { t: 'road'; roadId: string }  // legacy scene debug control
   | { t: 'choice'; field: string; value: string }
   | { t: 'ready' }
   | { t: 'ping'; sentAt: number } // clock offset estimation (§9)
@@ -38,6 +39,7 @@ export type RoomMsg =
       full: boolean;
       seeded: Role[];
       readyRoles: Role[];
+      destination: Destination;
       recipe?: Recipe;
     }
   | { t: 'roomFull' }
@@ -45,7 +47,7 @@ export type RoomMsg =
   | { t: 'generationFailed'; reason: string }
   | { t: 'pong'; sentAt: number; serverTime: number }
   | { t: 'nameWord'; glyph: string; word: string }
-  | { t: 'peerRoad'; roadId: string }  // peer sees the driver's road choice
+  | { t: 'peerRoad'; roadId: string }  // legacy scene debug control
   // --- M3+ ---
   | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }

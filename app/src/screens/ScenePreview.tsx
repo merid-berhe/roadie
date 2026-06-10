@@ -4,12 +4,13 @@
 import { useState, useEffect, useRef } from 'react';
 import RideScene from '../scene/RideScene';
 import type { CameraMode } from '../scene/RideScene';
-import ParisTiles from '../scene/ParisTiles';
+import ParisTiles, { PARIS_TILE_ANCHORS, type ParisAnchorId } from '../scene/ParisTiles';
 import type { RoadId } from '../scene/scenes';
 import type { GestureKind } from '@roadie/shared';
 
 const ROAD_OPTIONS: RoadId[]     = ['desert', 'coast', 'mountain', 'city'];
 const GESTURE_OPTIONS: (GestureKind | null)[] = [null, 'wave', 'heart', 'headlights', 'tambourine', 'shaker', 'chime'];
+const PARIS_ANCHOR_OPTIONS = Object.keys(PARIS_TILE_ANCHORS) as ParisAnchorId[];
 const RIDE_DURATION = 120;
 
 export default function ScenePreview() {
@@ -23,6 +24,16 @@ export default function ScenePreview() {
   const [cameraMode, setCameraMode]   = useState<CameraMode>('interior');
   const [pixelRatio, setPixelRatio]   = useState(0.25);
   const [useGoogleMaps, setUseGoogleMaps] = useState(false);
+  const [googleAnchorId, setGoogleAnchorId] = useState<ParisAnchorId>('champs-elysees');
+  const [googleHeadingDeg, setGoogleHeadingDeg] = useState(PARIS_TILE_ANCHORS['champs-elysees'].headingDeg);
+  const [googleLiftM, setGoogleLiftM] = useState(0.65);
+
+  function chooseParisAnchor(anchorId: ParisAnchorId) {
+    setGoogleAnchorId(anchorId);
+    setGoogleHeadingDeg(PARIS_TILE_ANCHORS[anchorId].headingDeg);
+    setPositionSec(0);
+    setPlaying(false);
+  }
 
   // rAF ticker
   const lastRef = useRef(performance.now());
@@ -43,7 +54,14 @@ export default function ScenePreview() {
       {/* 3D Scene */}
       <div className="absolute inset-0" style={{ imageRendering: pixelRatio < 0.8 && !useGoogleMaps ? 'pixelated' : 'auto' }}>
         {useGoogleMaps
-          ? <ParisTiles positionSec={positionSec} rideDuration={RIDE_DURATION} />
+          ? <ParisTiles
+              anchorId={googleAnchorId}
+              positionSec={positionSec}
+              rideDuration={RIDE_DURATION}
+              headingDeg={googleHeadingDeg}
+              liftM={googleLiftM}
+              pixelRatio={pixelRatio}
+            />
           : <RideScene
               road={road}
               positionSec={positionSec}
@@ -96,6 +114,29 @@ export default function ScenePreview() {
             {r}
           </button>
         ))}
+
+        {useGoogleMaps && (
+          <>
+            <span className="text-white/40 ml-1">place:</span>
+            <select
+              value={googleAnchorId}
+              onChange={(e) => chooseParisAnchor(e.target.value as ParisAnchorId)}
+              className="rounded bg-white/10 px-1 py-0.5 text-white"
+            >
+              {PARIS_ANCHOR_OPTIONS.map((anchorId) => (
+                <option key={anchorId} value={anchorId}>{PARIS_TILE_ANCHORS[anchorId].label}</option>
+              ))}
+            </select>
+            <span className="text-white/40 ml-1">heading:</span>
+            <input type="range" min={0} max={359} step={1} value={googleHeadingDeg}
+              onChange={(e) => setGoogleHeadingDeg(Number(e.target.value))} className="w-24" />
+            <span className="w-8 text-white/50">{Math.round(googleHeadingDeg)}°</span>
+            <span className="text-white/40 ml-1">lift:</span>
+            <input type="range" min={-1} max={3} step={0.05} value={googleLiftM}
+              onChange={(e) => setGoogleLiftM(Number(e.target.value))} className="w-20" />
+            <span className="w-9 text-white/50">{googleLiftM.toFixed(2)}m</span>
+          </>
+        )}
 
         {/* Playback */}
         <span className="text-white/40 ml-1">pos:</span>

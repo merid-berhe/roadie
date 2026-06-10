@@ -6,6 +6,7 @@ import { useRoom } from '../state/room';
 // The bed fades in here; crossfade to the track fires from RideScreen when rideStart arrives.
 export default function Generating() {
   const riders = useRoom((s) => s.riders);
+  const destination = useRoom((s) => s.destination);
 
   useEffect(() => {
     startBedSilent(); // safe no-op if already started during compose
@@ -42,7 +43,9 @@ export default function Generating() {
           ))}
         </div>
         <p className="text-sm text-white/60">tuning your station…</p>
-        <p className="text-xs text-white/30">your song is being made</p>
+        <p className="text-xs text-white/30">
+          {destination ? `${destination.name}, ${destination.country}` : 'your song is being made'}
+        </p>
       </div>
       <a
         href={location.pathname}

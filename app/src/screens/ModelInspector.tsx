@@ -1,4 +1,4 @@
-import { Suspense, useState, useRef } from 'react';
+import { Suspense, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, useGLTF, GizmoHelper, GizmoViewport, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -6,7 +6,6 @@ import * as THREE from 'three';
 // Live camera position tracker
 function CameraTracker({ onUpdate }: { onUpdate: (info: string) => void }) {
   const { camera, scene: _ } = useThree();
-  const controls = useRef<{ target: THREE.Vector3 } | null>(null);
   useFrame(() => {
     const p = camera.position;
     onUpdate(

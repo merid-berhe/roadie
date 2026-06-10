@@ -1,9 +1,10 @@
 import type * as Party from 'partykit/server';
-import type { ClientMsg, Phase, Rider, Role, RoomMsg } from '@roadie/shared';
+import type { ClientMsg, Destination, Phase, Rider, Role, RoomMsg } from '@roadie/shared';
 import {
   buildPrompt,
   DRIVER_OPTIONS,
   PASSENGER_OPTIONS,
+  pickDestinationForRoom,
   type DriverChoices,
   type PassengerChoices,
   type Recipe,
@@ -27,6 +28,7 @@ export default class RideRoom implements Party.Server {
   private passengerChoices: Partial<PassengerChoices> = {};
   private readyConnIds = new Set<string>();
   private generationInput: ReturnType<typeof buildPrompt> | null = null;
+  private readonly destination: Destination;
 
   // Generation (M3)
   private audioUrl: string | null = null;
@@ -45,8 +47,9 @@ export default class RideRoom implements Party.Server {
     const falKey   = room.env['FAL_KEY']     as string | undefined;
     const mockMode = room.env['MOCK_MUSIC']  as string | undefined;
     const useMock  = mockMode === 'true' || !falKey;
+    this.destination = pickDestinationForRoom(room.id);
     this.generator = useMock ? new MockMusicGenerator() : new FalMiniMaxGenerator(falKey!);
-    console.log(`[room] generator=${useMock ? 'mock (no charges)' : 'fal.ai MiniMax'}`);
+    console.log(`[room] generator=${useMock ? 'mock (no charges)' : 'fal.ai MiniMax'} destination=${this.destination.id}`);
   }
 
   onMessage(raw: string, sender: Party.Connection): void {
@@ -148,6 +151,7 @@ export default class RideRoom implements Party.Server {
       seedDriver, seedPassenger,
       this.driverChoices as DriverChoices,
       this.passengerChoices as PassengerChoices,
+      this.destination,
     );
     this.phase = 'generating';
     this.broadcastState();
@@ -323,7 +327,17 @@ export default class RideRoom implements Party.Server {
     const readyRoles = this.readyRolesArr();
     const recipe: Recipe | undefined = this.generationInput?.recipe;
     for (const [connId, p] of this.participants) {
-      const msg: RoomMsg = { t: 'state', phase: this.phase, you: p.role, riders, full, seeded, readyRoles, recipe };
+      const msg: RoomMsg = {
+        t: 'state',
+        phase: this.phase,
+        you: p.role,
+        riders,
+        full,
+        seeded,
+        readyRoles,
+        destination: this.destination,
+        recipe,
+      };
       this.room.getConnection(connId)?.send(JSON.stringify(msg));
     }
   }

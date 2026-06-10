@@ -19,6 +19,7 @@
     "3d-tiles-renderer": "^0.4.27",
     "partysocket": "^1.1.19",
     "pixi.js": "^8.19.0",
+    "playcanvas": "^2.19.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.184.0",

@@ -31,10 +31,12 @@ export default function RideScreen() {
   const rideStartAt    = useRoom((s) => s.rideStartAt);
   const bpm            = useRoom((s) => s.bpm);
   const clockOffset    = useRoom((s) => s.clockOffset);
+  const destination    = useRoom((s) => s.destination);
 
   const [roomCode]    = useState(getOrCreateRoomCode);
   const [postPhase, setPostPhase] = useState<PostPhase | null>(null);
   const [savedSongId, setSavedSongId] = useState<string | null>(null);
+  const destinationId = destination?.id;
 
   const rideStartTracked = useRef(false);
   const tuningStart      = useRef<number | null>(null);
@@ -63,7 +65,7 @@ export default function RideScreen() {
   useEffect(() => { if (full) startBedSilent(); }, [full]);
 
   // Analytics: paired
-  useEffect(() => { if (full) track('paired', { mode: 'invite' }); }, [full]);
+  useEffect(() => { if (full) track('paired', { mode: 'invite', destination_id: destinationId }); }, [full, destinationId]);
 
   // Analytics: tuning phase tracking (§13 highest-risk window)
   useEffect(() => {
@@ -88,18 +90,18 @@ export default function RideScreen() {
       rideStartTracked.current = true;
       const tuningMs = tuningStart.current ? Date.now() - tuningStart.current : 0;
       track('tuning_completed', { ms_elapsed: tuningMs, source: audioUrl.startsWith('mock://') ? 'borrowed' : 'own' });
-      track('ride_started', { music_source: audioUrl.startsWith('mock://') ? 'borrowed' : 'own' });
+      track('ride_started', { music_source: audioUrl.startsWith('mock://') ? 'borrowed' : 'own', destination_id: destinationId });
       setAnalyticsRide(roomCode);
     }
-  }, [audioUrl, rideStartAt, bpm, clockOffset, roomCode]);
+  }, [audioUrl, rideStartAt, bpm, clockOffset, roomCode, destinationId]);
 
   // Phase: arrival
   useEffect(() => {
     if (phase === 'arrival' && !postPhase) {
-      track('ride_completed');
+      track('ride_completed', { destination_id: destinationId });
       setPostPhase('arrival');
     }
-  }, [phase, postPhase]);
+  }, [phase, postPhase, destinationId]);
 
   if (rejectedFull) {
     return (

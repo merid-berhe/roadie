@@ -9,6 +9,8 @@ type Song = {
   title: string | null;
   audio_url: string;
   contributor_glyphs: string[] | null;
+  destination_id: string | null;
+  destinations: { name: string; country: string } | null;
   road: string | null;
   created_at: string;
   recipe: Record<string, unknown> | null;
@@ -26,7 +28,7 @@ export default function Glovebox({ onBack }: { onBack: () => void }) {
     if (!supabase || !userId) { setLoading(false); return; }
     supabase
       .from('glovebox_entries')
-      .select('songs(*)')
+      .select('songs(*, destinations(name, country))')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
@@ -72,6 +74,9 @@ export default function Glovebox({ onBack }: { onBack: () => void }) {
         {songs.map((song) => {
           const date = new Date(song.created_at).toLocaleDateString();
           const isPlaying = playing === song.id;
+          const place = song.destinations
+            ? `${song.destinations.name}, ${song.destinations.country}`
+            : song.road ?? 'road';
           return (
             <button
               key={song.id}
@@ -87,7 +92,7 @@ export default function Glovebox({ onBack }: { onBack: () => void }) {
               <div className="flex-1 min-w-0">
                 <p className="truncate font-medium">{song.title ?? 'untitled'}</p>
                 <p className="text-xs text-white/40">
-                  {song.contributor_glyphs?.join(' + ')} · {song.road ?? 'coast'} · {date}
+                  {song.contributor_glyphs?.join(' + ')} · {place} · {date}
                 </p>
               </div>
             </button>

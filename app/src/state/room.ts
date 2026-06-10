@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ClientMsg, GestureKind, Phase, Recipe, Rider, Role, RoomMsg } from '@roadie/shared';
+import type { ClientMsg, Destination, GestureKind, Phase, Recipe, Rider, Role, RoomMsg } from '@roadie/shared';
 import { offsetFromPong } from '../net/clock';
 
 // §3: Zustand is a READ-ONLY PROJECTION of room state. `ingest` is the only writer
@@ -13,6 +13,7 @@ type RoomState = {
   full: boolean;
   seeded: Role[];
   readyRoles: Role[];
+  destination: Destination | null;
   recipe: Recipe | null;
   peerChoices: Record<string, string>;
   // Generation (M3)
@@ -51,6 +52,7 @@ const initial = {
   full: false,
   seeded: [] as Role[],
   readyRoles: [] as Role[],
+  destination: null as Destination | null,
   recipe: null as Recipe | null,
   peerChoices: {} as Record<string, string>,
   audioUrl: null as string | null,
@@ -66,7 +68,7 @@ const initial = {
   fireworkSynced: null as boolean | null,
   fireworkAt: 0,
   peerNameWord: null as string | null,
-  selectedRoad: 'desert' as string,     // driver-picked road; default desert
+  selectedRoad: 'desert' as string,
   send: noop,
 };
 
@@ -83,7 +85,9 @@ export const useRoom = create<RoomState>((set) => ({
             full: msg.full,
             seeded: msg.seeded,
             readyRoles: msg.readyRoles,
+            destination: msg.destination,
             recipe: msg.recipe ?? state.recipe,
+            selectedRoad: msg.destination.theme,
           };
         case 'roomFull':
           return { rejectedFull: true };
