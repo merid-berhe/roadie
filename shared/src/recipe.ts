@@ -2,6 +2,7 @@
 // buildPrompt() is deterministic + server-side so the recipe is the canonical record.
 
 import type { Destination } from './destinations';
+import type { RidePerformance } from './ride';
 
 export type DriverChoices = {
   groove: 'cruising' | 'winding' | 'open-highway';
@@ -25,6 +26,7 @@ export type Recipe = {
   driver: { seed: string } & DriverChoices;
   passenger: { seed: string } & PassengerChoices;
   radio?: RadioStyles;
+  performance?: RidePerformance; // §5b — what the pair did during the ride
 };
 
 // §5a "tune the radio" — optional free text, gated + translated by an LLM

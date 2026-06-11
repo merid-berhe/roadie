@@ -36,6 +36,16 @@ type RoomState = {
   // §5a "tune the radio" — minted style cards by role (never raw text)
   whisperCards: Partial<Record<Role, { glyph: string; style: string }>>;
   whisperRejectedAt: number;
+  radioLocked: boolean;
+  // §5b ride performance layer
+  rideSeed: number | null;
+  carLane: number;                  // server-relayed lane (passenger view; driver is optimistic)
+  caughtIds: number[];
+  lastCatch: { id: number; byGlyph: string; at: number } | null;
+  peerRiffTap: { idx: number; role: Role; at: number } | null;
+  riffLandedIdx: { idx: number; at: number } | null;
+  landmarksLit: number[];
+  lastLandmarkLit: { idx: number; at: number } | null;
   // Plumbing
   send: (msg: ClientMsg) => void;
   ingest: (msg: RoomMsg) => void;
@@ -74,6 +84,15 @@ const initial = {
   selectedRoad: 'desert' as string,
   whisperCards: {} as Partial<Record<Role, { glyph: string; style: string }>>,
   whisperRejectedAt: 0,
+  radioLocked: false,
+  rideSeed: null as number | null,
+  carLane: 1,
+  caughtIds: [] as number[],
+  lastCatch: null as { id: number; byGlyph: string; at: number } | null,
+  peerRiffTap: null as { idx: number; role: Role; at: number } | null,
+  riffLandedIdx: null as { idx: number; at: number } | null,
+  landmarksLit: [] as number[],
+  lastLandmarkLit: null as { idx: number; at: number } | null,
   send: noop,
 };
 
@@ -93,13 +112,14 @@ export const useRoom = create<RoomState>((set) => ({
             destination: msg.destination,
             recipe: msg.recipe ?? state.recipe,
             selectedRoad: msg.destination.theme,
+            radioLocked: msg.radioLocked ?? state.radioLocked,
           };
         case 'roomFull':
           return { rejectedFull: true };
         case 'peerChoice':
           return { peerChoices: { ...state.peerChoices, [msg.field]: msg.value } };
         case 'rideStart':
-          return { phase: 'riding', audioUrl: msg.audioUrl, rideStartAt: msg.rideStartAt, bpm: msg.bpm };
+          return { phase: 'riding', audioUrl: msg.audioUrl, rideStartAt: msg.rideStartAt, bpm: msg.bpm, rideSeed: msg.rideSeed };
         case 'generationFailed':
           return { generationFailed: true, generationFailedReason: msg.reason };
         case 'pong': {
@@ -123,6 +143,22 @@ export const useRoom = create<RoomState>((set) => ({
           };
         case 'whisperRejected':
           return { whisperRejectedAt: Date.now() };
+        case 'peerLane':
+          return { carLane: msg.lane };
+        case 'catchLanded':
+          return {
+            caughtIds: [...state.caughtIds, msg.id],
+            lastCatch: { id: msg.id, byGlyph: msg.byGlyph, at: Date.now() },
+          };
+        case 'peerRiffTap':
+          return { peerRiffTap: { idx: msg.idx, role: msg.role, at: Date.now() } };
+        case 'riffLanded':
+          return { riffLandedIdx: { idx: msg.idx, at: Date.now() } };
+        case 'landmarkLit':
+          return {
+            landmarksLit: [...state.landmarksLit, msg.idx],
+            lastLandmarkLit: { idx: msg.idx, at: Date.now() },
+          };
         case 'peerRoad':
           return { selectedRoad: msg.roadId };
         default:

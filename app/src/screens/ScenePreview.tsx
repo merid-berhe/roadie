@@ -25,6 +25,10 @@ const initialEngine: PreviewEngine = initialParams.get('engine') === 'r3f' ? 'r3
 const initialGesture = (GESTURE_OPTIONS as (string | null)[]).includes(initialParams.get('gesture'))
   ? (initialParams.get('gesture') as GestureKind)
   : null;
+// §5b verb-layer preview: ?seed=42&lane=0&lit=0,1
+const initialRideSeed = initialParams.has('seed') ? Number(initialParams.get('seed')) || 42 : null;
+const initialLane = Number(initialParams.get('lane') ?? 1) === 0 ? 0 : 1;
+const initialLit = (initialParams.get('lit') ?? '').split(',').filter(Boolean).map(Number);
 
 export default function ScenePreview() {
   const [road, setRoad]               = useState<RoadId>(initialRoad);
@@ -95,6 +99,10 @@ export default function ScenePreview() {
               driverGestureKind={driverGesture}
               passengerGestureKind={passengerGesture}
               firework={firework}
+              rideSeed={initialRideSeed}
+              carLane={initialLane}
+              caughtIds={[]}
+              landmarksLit={initialLit}
             />
           : <RideScene
               road={road}

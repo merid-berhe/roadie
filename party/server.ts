@@ -2,15 +2,23 @@ import type * as Party from 'partykit/server';
 import type { ClientMsg, Destination, Phase, Rider, Role, RoomMsg } from '@roadie/shared';
 import {
   buildPrompt,
+  buildRideSchedule,
+  CATCH_WINDOW_SEC,
   DRIVER_OPTIONS,
+  FLASH_WINDOW_SEC,
   PASSENGER_OPTIONS,
   pickDestinationForRoom,
+  RIFF_ANSWER_SEC,
+  RIFF_CALL_SEC,
+  RIFF_TAPS,
+  rideSeedFromRoom,
   WHISPER_MAX_CHARS,
   WHISPER_MAX_TRIES,
   type DriverChoices,
   type PassengerChoices,
   type RadioStyles,
   type Recipe,
+  type RideSchedule,
 } from '@roadie/shared';
 import { FalMiniMaxGenerator, MockMusicGenerator, type MusicGenerator, type MusicGeneratorInput } from './music';
 import { FalLlmTranslator, MockWhisperTranslator, type WhisperTranslator } from './whisper';
@@ -37,12 +45,26 @@ export default class RideRoom implements Party.Server {
   // §5a "tune the radio" — minted style descriptors only, never raw text
   private radioStyles: RadioStyles = {};
   private whisperCounts = new Map<string, number>();
+  private translateInFlight = 0;
   private readonly translator: WhisperTranslator;
 
-  // Generation (M3)
+  // Generation (M3) + pre-fire (§16: overlap generation with composing)
   private audioUrl: string | null = null;
   private rideStartAt: number | null = null;
+  private prefired = false;          // generation kicked off during compose
+  private radioLocked = false;       // prompt is frozen; whisper input closes
+  private prefireTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly generator: MusicGenerator;
+
+  // §5b ride performance layer — schedule shared with clients via rideSeed
+  private readonly rideSeed: number;
+  private readonly schedule: RideSchedule;
+  private carLane = 1;
+  private caughtIds = new Set<number>();
+  private riffTaps = new Map<string, number>();   // `${idx}:${role}` → tap count
+  private riffLanded = new Set<number>();
+  private landmarkFlashes = new Map<number, Set<string>>();
+  private landmarksLit = new Set<number>();
 
   // Clock sync (M4) — §9
   private syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -57,6 +79,8 @@ export default class RideRoom implements Party.Server {
     const mockMode = room.env['MOCK_MUSIC']  as string | undefined;
     const useMock  = mockMode === 'true' || !falKey;
     this.destination = pickDestinationForRoom(room.id);
+    this.rideSeed = rideSeedFromRoom(room.id);
+    this.schedule = buildRideSchedule(this.rideSeed);
     this.generator = useMock ? new MockMusicGenerator() : new FalMiniMaxGenerator(falKey!);
     this.translator = useMock ? new MockWhisperTranslator() : new FalLlmTranslator(falKey!);
     console.log(`[room] generator=${useMock ? 'mock (no charges)' : 'fal.ai MiniMax'} destination=${this.destination.id}`);
@@ -76,6 +100,10 @@ export default class RideRoom implements Party.Server {
       case 'firework':return this.handleFirework(sender);
       case 'name':    return this.handleName(msg, sender);
       case 'road':    return this.handleRoad(msg, sender);
+      case 'lane':    return this.handleLane(msg, sender);
+      case 'catch':   return this.handleCatch(msg, sender);
+      case 'riffTap': return this.handleRiffTap(msg, sender);
+      case 'flash':   return this.handleFlash(msg, sender);
     }
   }
 
@@ -108,7 +136,7 @@ export default class RideRoom implements Party.Server {
     if (this.phase === 'riding' && this.audioUrl && this.rideStartAt) {
       sender.send(JSON.stringify({
         t: 'rideStart', audioUrl: this.audioUrl, source: 'own',
-        rideStartAt: this.rideStartAt, bpm: this.generationInput!.bpm,
+        rideStartAt: this.rideStartAt, bpm: this.generationInput!.bpm, rideSeed: this.rideSeed,
       } satisfies RoomMsg));
     }
     this.broadcastState();
@@ -122,6 +150,7 @@ export default class RideRoom implements Party.Server {
     this.seeds.set(sender.id, msg.word);
     this.broadcastToPeer(sender.id, { t: 'peerChoice', glyph: p.glyph, field: 'seed', value: msg.word });
     this.broadcastState();
+    this.maybeSchedulePrefire();
   }
 
   private handleChoice(msg: Extract<ClientMsg, { t: 'choice' }>, sender: Party.Connection): void {
@@ -136,22 +165,25 @@ export default class RideRoom implements Party.Server {
     } else { return; }
     this.broadcastToPeer(sender.id, { t: 'peerChoice', glyph: p.glyph, field: msg.field, value: msg.value });
     this.broadcastState();
+    this.maybeSchedulePrefire();
   }
 
   // §5a — gate + translate free text; only the minted style card is ever shared
   private handleWhisper(msg: Extract<ClientMsg, { t: 'whisper' }>, sender: Party.Connection): void {
     const p = this.participants.get(sender.id);
-    if (!p || this.phase !== 'lobby') return;
+    if (!p || this.phase !== 'lobby' || this.radioLocked) return;
     const text = msg.text.trim().slice(0, WHISPER_MAX_CHARS);
     if (!text) return;
     const count = this.whisperCounts.get(sender.id) ?? 0;
     if (count >= WHISPER_MAX_TRIES) return; // bounds LLM spend per rider
     this.whisperCounts.set(sender.id, count + 1);
 
+    this.translateInFlight++;
     this.translator
       .translate(text)
       .then((res) => {
-        if (this.phase !== 'lobby') return; // generation already fired — too late
+        this.translateInFlight--;
+        if (this.phase !== 'lobby' || this.radioLocked) return; // prompt frozen — too late
         if (!res.ok || !res.style) {
           this.room.getConnection(sender.id)?.send(
             JSON.stringify({ t: 'whisperRejected' } satisfies RoomMsg),
@@ -165,6 +197,7 @@ export default class RideRoom implements Party.Server {
         }
       })
       .catch((err: unknown) => {
+        this.translateInFlight--;
         console.error('[room] whisper_translate_failed:', err);
         this.room.getConnection(sender.id)?.send(
           JSON.stringify({ t: 'whisperRejected' } satisfies RoomMsg),
@@ -178,13 +211,52 @@ export default class RideRoom implements Party.Server {
     this.broadcastState();
     if (this.readyConnIds.size === 2 && this.participants.size === 2) {
       const allComplete = [...this.participants.keys()].every((id) => this.hasAllChoices(id));
-      if (allComplete) this.advanceToGenerating();
+      if (!allComplete) return;
+      if (this.audioUrl) {
+        // pre-fired generation already finished — straight into the ride
+        this.startRide();
+      } else if (this.prefired) {
+        // generation is in flight from the pre-fire; show the tuning mask
+        this.phase = 'generating';
+        this.broadcastState();
+      } else {
+        this.fireGeneration();
+        this.phase = 'generating';
+        this.broadcastState();
+      }
     }
   }
 
-  // --- generation (M3) ---
+  // --- generation (M3) + pre-fire (§16) ---
 
-  private advanceToGenerating(): void {
+  // §16: overlap generation with composing. Once both riders have completed all
+  // choices (not yet "ready"), wait a short grace period for whispers, freeze
+  // the prompt, and fire — by "Let's drive" the track is usually done or close.
+  private maybeSchedulePrefire(): void {
+    if (this.prefired || this.prefireTimer || this.phase !== 'lobby') return;
+    if (this.participants.size !== 2) return;
+    if (![...this.participants.keys()].every((id) => this.hasAllChoices(id))) return;
+    this.prefireTimer = setTimeout(() => {
+      this.prefireTimer = null;
+      this.tryPrefire();
+    }, 6_000);
+  }
+
+  private tryPrefire(): void {
+    if (this.prefired || this.phase !== 'lobby') return;
+    if (![...this.participants.keys()].every((id) => this.hasAllChoices(id))) return;
+    if (this.translateInFlight > 0) {
+      // a whisper is still at the gate — give it a moment, then try again
+      this.prefireTimer = setTimeout(() => { this.prefireTimer = null; this.tryPrefire(); }, 1_500);
+      return;
+    }
+    this.prefired = true;
+    this.radioLocked = true;
+    this.broadcastState(); // clients close the whisper input
+    this.fireGeneration();
+  }
+
+  private fireGeneration(): void {
     const driverConn = this.getConnIdForRole('driver');
     const passengerConn = this.getConnIdForRole('passenger');
     if (!driverConn || !passengerConn) return;
@@ -192,6 +264,8 @@ export default class RideRoom implements Party.Server {
     const seedPassenger = this.seeds.get(passengerConn);
     if (!seedDriver || !seedPassenger) return;
 
+    this.prefired = true;
+    this.radioLocked = true;
     this.generationInput = buildPrompt(
       seedDriver, seedPassenger,
       this.driverChoices as DriverChoices,
@@ -199,8 +273,6 @@ export default class RideRoom implements Party.Server {
       this.destination,
       this.radioStyles,
     );
-    this.phase = 'generating';
-    this.broadcastState();
 
     // Fire async — room continues handling messages while this runs (§15 happy path)
     this.runGeneration(this.generationInput).catch((err: unknown) =>
@@ -209,26 +281,13 @@ export default class RideRoom implements Party.Server {
   }
 
   private async runGeneration(input: MusicGeneratorInput): Promise<void> {
-    console.log(`[room] generation_requested prompt="${input.prompt.slice(0, 60)}…"`);
+    console.log(`[room] generation_requested prefired=${this.phase === 'lobby'} prompt="${input.prompt.slice(0, 60)}…"`);
     try {
       const result = await this.generator.generate(input);
       console.log(`[room] generation_succeeded latency_ms=${result.latencyMs}`);
-
       this.audioUrl = result.audioUrl;
-      this.rideStartAt = Date.now() + 2_000; // 2s buffer for clients to load (M4: proper clock sync)
-      this.phase = 'riding';
-
-      // Broadcast rideStart first (triggers audio), then state (triggers routing)
-      const rideStartMsg: RoomMsg = {
-        t: 'rideStart', audioUrl: result.audioUrl, source: 'own',
-        rideStartAt: this.rideStartAt, bpm: input.bpm,
-      };
-      for (const connId of this.participants.keys()) {
-        this.room.getConnection(connId)?.send(JSON.stringify(rideStartMsg));
-      }
-      this.startSyncInterval();
-      this.scheduleArrival();
-      this.broadcastState();
+      // pre-fired and still composing: hold the track until both riders are ready
+      if (this.phase === 'generating') this.startRide();
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       console.error(`[room] generation_failed reason="${reason}"`);
@@ -239,6 +298,26 @@ export default class RideRoom implements Party.Server {
         );
       }
     }
+  }
+
+  private startRide(): void {
+    if (!this.audioUrl || !this.generationInput || this.phase === 'riding') return;
+    this.rideStartAt = Date.now() + 2_000; // 2s buffer for clients to load (M4: proper clock sync)
+    this.phase = 'riding';
+    // §5b: the performance record lives inside the recipe from the first beat
+    this.generationInput.recipe.performance = { catches: [], riffs: [], landmarks: [] };
+
+    // Broadcast rideStart first (triggers audio), then state (triggers routing)
+    const rideStartMsg: RoomMsg = {
+      t: 'rideStart', audioUrl: this.audioUrl, source: 'own',
+      rideStartAt: this.rideStartAt, bpm: this.generationInput.bpm, rideSeed: this.rideSeed,
+    };
+    for (const connId of this.participants.keys()) {
+      this.room.getConnection(connId)?.send(JSON.stringify(rideStartMsg));
+    }
+    this.startSyncInterval();
+    this.scheduleArrival();
+    this.broadcastState();
   }
 
   // --- gestures (M5, §8) ---
@@ -277,6 +356,80 @@ export default class RideRoom implements Party.Server {
           JSON.stringify({ t: 'fireworkSynced', synced: true } satisfies RoomMsg),
         );
       }
+    }
+  }
+
+  // --- §5b ride performance layer ---
+
+  /** Server-authoritative ride position in seconds. */
+  private positionNow(): number {
+    return this.rideStartAt ? (Date.now() - this.rideStartAt) / 1000 : -1;
+  }
+
+  private broadcastAll(msg: RoomMsg): void {
+    for (const connId of this.participants.keys()) {
+      this.room.getConnection(connId)?.send(JSON.stringify(msg));
+    }
+  }
+
+  private handleLane(msg: Extract<ClientMsg, { t: 'lane' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || p.role !== 'driver' || this.phase !== 'riding') return;
+    const lane = msg.lane === 0 ? 0 : 1;
+    if (lane === this.carLane) return;
+    this.carLane = lane;
+    this.broadcastToPeer(sender.id, { t: 'peerLane', lane });
+  }
+
+  private handleCatch(msg: Extract<ClientMsg, { t: 'catch' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || p.role !== 'passenger' || this.phase !== 'riding') return;
+    const note = this.schedule.notes.find((n) => n.id === msg.id);
+    if (!note || this.caughtIds.has(note.id)) return;
+    // generous server window (client already judged tighter): catch + network slack
+    if (Math.abs(this.positionNow() - note.atSec) > CATCH_WINDOW_SEC + 0.8) return;
+    if (note.lane !== this.carLane) return;
+    this.caughtIds.add(note.id);
+    this.generationInput?.recipe.performance?.catches.push({ id: note.id, atSec: note.atSec });
+    this.broadcastAll({ t: 'catchLanded', id: note.id, byGlyph: p.glyph });
+  }
+
+  private handleRiffTap(msg: Extract<ClientMsg, { t: 'riffTap' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || this.phase !== 'riding') return;
+    const riff = this.schedule.riffs.find((r) => r.idx === msg.idx);
+    if (!riff || this.riffLanded.has(riff.idx)) return;
+    const pos = this.positionNow();
+    const isCaller = p.role === riff.caller;
+    const windowEnd = riff.atSec + (isCaller ? RIFF_CALL_SEC : RIFF_ANSWER_SEC);
+    if (pos < riff.atSec - 0.5 || pos > windowEnd + 0.8) return;
+    const key = `${riff.idx}:${p.role}`;
+    const taps = (this.riffTaps.get(key) ?? 0) + 1;
+    if (taps > RIFF_TAPS) return;
+    this.riffTaps.set(key, taps);
+    this.broadcastToPeer(sender.id, { t: 'peerRiffTap', idx: riff.idx, role: p.role });
+    const callerTaps = this.riffTaps.get(`${riff.idx}:${riff.caller}`) ?? 0;
+    const answerTaps = this.riffTaps.get(`${riff.idx}:${riff.caller === 'driver' ? 'passenger' : 'driver'}`) ?? 0;
+    if (callerTaps >= RIFF_TAPS && answerTaps >= RIFF_TAPS) {
+      this.riffLanded.add(riff.idx);
+      this.generationInput?.recipe.performance?.riffs.push(riff.idx);
+      this.broadcastAll({ t: 'riffLanded', idx: riff.idx });
+    }
+  }
+
+  private handleFlash(msg: Extract<ClientMsg, { t: 'flash' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || this.phase !== 'riding') return;
+    const landmark = this.schedule.landmarks.find((l) => l.idx === msg.idx);
+    if (!landmark || this.landmarksLit.has(landmark.idx)) return;
+    if (Math.abs(this.positionNow() - landmark.atSec) > FLASH_WINDOW_SEC + 0.8) return;
+    const flashes = this.landmarkFlashes.get(landmark.idx) ?? new Set<string>();
+    flashes.add(sender.id);
+    this.landmarkFlashes.set(landmark.idx, flashes);
+    if (flashes.size >= 2) {
+      this.landmarksLit.add(landmark.idx);
+      this.generationInput?.recipe.performance?.landmarks.push(landmark.idx);
+      this.broadcastAll({ t: 'landmarkLit', idx: landmark.idx });
     }
   }
 
@@ -383,6 +536,7 @@ export default class RideRoom implements Party.Server {
         readyRoles,
         destination: this.destination,
         recipe,
+        radioLocked: this.radioLocked,
       };
       this.room.getConnection(connId)?.send(JSON.stringify(msg));
     }

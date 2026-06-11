@@ -27,6 +27,7 @@ export default function Compose() {
 
   const whisperCards = useRoom((s) => s.whisperCards);
   const whisperRejectedAt = useRoom((s) => s.whisperRejectedAt);
+  const radioLocked = useRoom((s) => s.radioLocked);
 
   const [ownSeed, setOwnSeed]     = useState<string | null>(null);
   const [ownChoices, setOwnChoices] = useState<AnyChoices>({});
@@ -178,7 +179,10 @@ export default function Compose() {
             </p>
           </div>
         ) : null}
-        {!ownCard || whisperTries < WHISPER_MAX_TRIES ? (
+        {radioLocked && (
+          <p className="mt-2 text-xs text-white/35">📻 the radio's set — your song is already being recorded</p>
+        )}
+        {!radioLocked && (!ownCard || whisperTries < WHISPER_MAX_TRIES) ? (
           <div className="mt-2 flex gap-2">
             <input
               type="text"
@@ -199,7 +203,7 @@ export default function Compose() {
             </button>
           </div>
         ) : null}
-        {whisperFailed && (
+        {whisperFailed && !radioLocked && (
           <p className="mt-2 text-xs text-amber-400/80">
             static… the radio couldn't tune to that. try different words?
           </p>

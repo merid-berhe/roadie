@@ -29,7 +29,12 @@ export type ClientMsg =
   | { t: 'gesture'; kind: GestureKind }
   | { t: 'firework' }
   | { t: 'name'; word: string }
-  | { t: 'report' };
+  | { t: 'report' }
+  // --- §5b ride performance layer ---
+  | { t: 'lane'; lane: number }        // driver: nudge the car to lane 0|1
+  | { t: 'catch'; id: number }         // passenger: caught scheduled note `id`
+  | { t: 'riffTap'; idx: number }      // a tap inside riff `idx`'s window
+  | { t: 'flash'; idx: number };       // headlight flash at landmark `idx`
 
 /** Room → Client */
 export type RoomMsg =
@@ -43,6 +48,7 @@ export type RoomMsg =
       readyRoles: Role[];
       destination: Destination;
       recipe?: Recipe;
+      radioLocked?: boolean; // §5a/§16 — prompt frozen by pre-fire, whisper input closes
     }
   | { t: 'roomFull' }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
@@ -54,9 +60,15 @@ export type RoomMsg =
   | { t: 'nameWord'; glyph: string; word: string }
   | { t: 'peerRoad'; roadId: string }  // legacy scene debug control
   // --- M3+ ---
-  | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
+  | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number; rideSeed: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }
   | { t: 'sync'; positionSec: number }
   | { t: 'peerGesture'; glyph: string; kind: GestureKind; atBeat?: number }
   | { t: 'fireworkSynced'; synced: boolean }
-  | { t: 'peerLeft' };
+  | { t: 'peerLeft' }
+  // --- §5b ride performance layer (all server-confirmed, sent to BOTH riders) ---
+  | { t: 'peerLane'; lane: number }
+  | { t: 'catchLanded'; id: number; byGlyph: string }
+  | { t: 'peerRiffTap'; idx: number; role: Role }
+  | { t: 'riffLanded'; idx: number }
+  | { t: 'landmarkLit'; idx: number };

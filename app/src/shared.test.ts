@@ -3,8 +3,10 @@ import {
   DESTINATIONS,
   IDENTITY_PALETTE,
   buildPrompt,
+  buildRideSchedule,
   deriveIdentity,
   pickDestinationForRoom,
+  rideSeedFromRoom,
 } from '@roadie/shared';
 
 // Foundation test (§5 health check): proves the workspace import resolves and
@@ -68,5 +70,25 @@ describe('destinations', () => {
     );
 
     expect(result.recipe.radio).toBeUndefined();
+  });
+});
+
+describe('ride schedule (§5b)', () => {
+  it('is deterministic for the same seed', () => {
+    expect(buildRideSchedule(12345)).toEqual(buildRideSchedule(12345));
+    expect(rideSeedFromRoom('room-abc')).toEqual(rideSeedFromRoom('room-abc'));
+  });
+
+  it('keeps notes clear of riffs, landmarks, and the finale', () => {
+    const s = buildRideSchedule(rideSeedFromRoom('any-room'));
+    const blocked = [...s.riffs.map((r) => r.atSec), ...s.landmarks.map((l) => l.atSec)];
+    expect(s.notes.length).toBeGreaterThan(5);
+    expect(s.riffs).toHaveLength(2);
+    expect(s.landmarks).toHaveLength(2);
+    for (const n of s.notes) {
+      expect(n.atSec).toBeGreaterThanOrEqual(10);
+      expect(n.atSec).toBeLessThan(102); // finale stays clear
+      for (const b of blocked) expect(Math.abs(n.atSec - b)).toBeGreaterThan(6);
+    }
   });
 });

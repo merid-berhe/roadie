@@ -4,7 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import * as pc from 'playcanvas';
-import type { GestureKind } from '@roadie/shared';
+import { buildRideSchedule, LANE_X, type GestureKind } from '@roadie/shared';
 import type { RoadId } from './scenes';
 
 type Props = {
@@ -15,6 +15,13 @@ type Props = {
   driverGestureKind?: GestureKind | null;
   passengerGestureKind?: GestureKind | null;
   firework?: { synced: boolean } | null;
+  // §5b ride performance layer (all optional — preview/legacy callers omit them)
+  rideSeed?: number | null;
+  carLane?: number;
+  caughtIds?: number[];
+  lastCatch?: { id: number; at: number } | null;
+  riffBloomAt?: number;
+  landmarksLit?: number[];
 };
 
 const FAR = 234;          // world tile length (z)
@@ -116,6 +123,12 @@ export default function PlayCanvasRideScene({
   driverGestureKind,
   passengerGestureKind,
   firework,
+  rideSeed = null,
+  carLane = 1,
+  caughtIds,
+  lastCatch = null,
+  riffBloomAt = 0,
+  landmarksLit,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const positionRef = useRef(positionSec);
@@ -124,6 +137,11 @@ export default function PlayCanvasRideScene({
   const driverGestureRef = useRef(driverGestureKind);
   const passengerGestureRef = useRef(passengerGestureKind);
   const fireworkRef = useRef(firework);
+  const carLaneRef = useRef(carLane);
+  const caughtIdsRef = useRef<number[]>(caughtIds ?? []);
+  const lastCatchRef = useRef(lastCatch);
+  const riffBloomAtRef = useRef(riffBloomAt);
+  const landmarksLitRef = useRef<number[]>(landmarksLit ?? []);
 
   useEffect(() => { positionRef.current = positionSec; }, [positionSec]);
   useEffect(() => { driverColorRef.current = driverColor; }, [driverColor]);
@@ -131,6 +149,11 @@ export default function PlayCanvasRideScene({
   useEffect(() => { driverGestureRef.current = driverGestureKind; }, [driverGestureKind]);
   useEffect(() => { passengerGestureRef.current = passengerGestureKind; }, [passengerGestureKind]);
   useEffect(() => { fireworkRef.current = firework; }, [firework]);
+  useEffect(() => { carLaneRef.current = carLane; }, [carLane]);
+  useEffect(() => { caughtIdsRef.current = caughtIds ?? []; }, [caughtIds]);
+  useEffect(() => { lastCatchRef.current = lastCatch; }, [lastCatch]);
+  useEffect(() => { riffBloomAtRef.current = riffBloomAt; }, [riffBloomAt]);
+  useEffect(() => { landmarksLitRef.current = landmarksLit ?? []; }, [landmarksLit]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -222,6 +245,10 @@ export default function PlayCanvasRideScene({
     createRoad(app, moving, theme);
     createThemeWorld(app, moving, drifters, bobbers, theme, road, heightAt);
     const carRig = createCar(app, driverColorRef.current, passengerColorRef.current, gestures);
+    const verbs = rideSeed != null ? createVerbLayer(app, rideSeed, road) : null;
+    let lastCatchSeen = 0;
+    let lastBloomSeen = riffBloomAtRef.current;
+    let rigX = LANE_X[carLaneRef.current === 0 ? 0 : 1];
 
     const resize = () => {
       const rect = mount.getBoundingClientRect();
@@ -280,9 +307,53 @@ export default function PlayCanvasRideScene({
         1.7 + sx * sx * 3.7 + (aspectK - 1) * 0.75,
         CAR_Z + Math.cos(yaw) * 5.8 * aspectK,
       );
-      camera.lookAt(0, 0.45, CAR_Z);
-      carRig.setLocalPosition(Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
-      carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
+      camera.lookAt(rigX * 0.6, 0.45, CAR_Z);
+      // lane changes ease the whole rig sideways; bob/roll keep it alive
+      const laneTarget = LANE_X[carLaneRef.current === 0 ? 0 : 1];
+      rigX += (laneTarget - rigX) * Math.min(1, dt * 3.5);
+      carRig.setLocalPosition(rigX + Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
+      carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5 - (laneTarget - rigX) * 6);
+      carShadow?.setLocalPosition(rigX, ROAD_TOP + 0.006, CAR_Z);
+
+      // §5b: notes, landmarks, catch sparkles, riff blooms
+      if (verbs) {
+        const pos = positionRef.current;
+        // notes are fireflies: they fly up the visible road from the horizon and
+        // meet the car at their scheduled beat (physically-fixed notes would
+        // approach from behind the front camera — no telegraph for the players)
+        for (const n of verbs.notes) {
+          const z = CAR_Z - (n.atSec - pos) * WORLD_SPEED;
+          const caught = caughtIdsRef.current.includes(n.id);
+          const visible = !caught && z > -BAND + 8 && z < 10;
+          n.entity.enabled = visible;
+          if (visible) {
+            // float above the roofline so the orb stays visible at the catch moment
+            n.entity.setLocalPosition(LANE_X[n.lane], 1.05 + Math.sin(elapsed * 2.5 + n.id) * 0.09, z);
+            n.entity.setLocalEulerAngles(0, elapsed * 50 + n.id * 40, 0);
+          }
+        }
+        for (const lm of verbs.landmarks) {
+          const z = CAR_Z + (lm.atSec - pos) * WORLD_SPEED;
+          const visible = z > -BAND - 20 && z < BAND + 20;
+          lm.entity.enabled = visible;
+          if (visible) lm.entity.setLocalPosition(0, 0, z);
+          if (!lm.lit && landmarksLitRef.current.includes(lm.idx)) {
+            lm.lit = true;
+            for (const part of lm.litParts) part.enabled = true;
+            spawnBurst(app, fireworks, new pc.Vec3(0, 2.8, z), [0xffd166, 0xffffff], 20, 1.4, 1.0, 0.08);
+          }
+        }
+        const lc = lastCatchRef.current;
+        if (lc && lc.at !== lastCatchSeen) {
+          lastCatchSeen = lc.at;
+          const note = verbs.notes.find((n) => n.id === lc.id);
+          spawnBurst(app, fireworks, new pc.Vec3(note ? LANE_X[note.lane] : rigX, 1.2, CAR_Z + 0.6), [0xffe9b0, 0xffd166, 0xffffff], 14, 0.9, 0.7, 0.06);
+        }
+        if (riffBloomAtRef.current > lastBloomSeen) {
+          lastBloomSeen = riffBloomAtRef.current;
+          spawnBurst(app, fireworks, new pc.Vec3(rigX, 2.2, CAR_Z), [colorToNumber(driverColorRef.current), colorToNumber(passengerColorRef.current), 0xffffff], 22, 1.3, 0.9, 0.07);
+        }
+      }
 
       updateCapsuleGestures(gestures, driverGestureRef.current, passengerGestureRef.current);
 
@@ -310,6 +381,7 @@ export default function PlayCanvasRideScene({
     const terrainTiles = [0, 1, 2]
       .map((i) => app.root.findByName(`terrain-${i}`) as pc.Entity)
       .filter(Boolean);
+    const carShadow = app.root.findByName('car-shadow') as pc.Entity | null;
 
     app.start();
 
@@ -322,7 +394,7 @@ export default function PlayCanvasRideScene({
       app.destroy();
       canvas.remove();
     };
-  }, [road]);
+  }, [road, rideSeed]);
 
   return <div ref={mountRef} className="absolute inset-0" />;
 }
@@ -925,7 +997,9 @@ function createCar(
     const model = (asset.resource as pc.ContainerResource).instantiateRenderEntity();
     holder.addChild(model);
     // measure world bounds, then scale about the holder origin to track width
-    // and drop the wheels onto the road surface
+    // and drop the wheels onto the road surface. bounds are world-space, so
+    // subtract the rig's position at measure time (it may already be
+    // lane-offset / bobbing when the GLB finishes loading).
     const aabb = new pc.BoundingBox();
     let first = true;
     for (const render of holder.findComponents('render') as pc.RenderComponent[]) {
@@ -934,11 +1008,16 @@ function createCar(
         else aabb.add(mi.aabb);
       }
     }
+    const rigPos = rig.getPosition().clone();
     const center = aabb.center.clone();
     const min = aabb.getMin().clone();
     const s = 1.9 / (aabb.halfExtents.x * 2);
     holder.setLocalScale(s, s, s);
-    holder.setLocalPosition(-center.x * s, ROAD_TOP - min.y * s, -(center.z - CAR_Z) * s);
+    holder.setLocalPosition(
+      -(center.x - rigPos.x) * s,
+      ROAD_TOP - rigPos.y - (min.y - rigPos.y) * s,
+      -(center.z - rigPos.z) * s,
+    );
   });
   asset.on('error', (err: string) => console.error('car glb failed:', err));
   app.assets.add(asset);
@@ -1021,23 +1100,127 @@ function updateCapsuleGestures(gestures: pc.Entity[], driverGesture?: GestureKin
   if (passengerHand) passengerHand.enabled = !!passengerGesture;
 }
 
-// ---------------------------------------------------------------- fireworks
+// ---------------------------------------------------------------- fireworks & bursts
 
 function spawnFirework(app: pc.Application, particles: { entity: pc.Entity; vel: pc.Vec3; life: number }[], synced: boolean, driverColor: number, passengerColor: number) {
   const colors = synced ? [driverColor, passengerColor, 0xffffff, 0xffd166] : [0xffffff, 0xd6d6d6];
-  const count = synced ? 64 : 22;
+  spawnBurst(app, particles, new pc.Vec3(0, 4.5, -26), colors, synced ? 64 : 22, synced ? 3.2 : 1.6, synced ? 1.6 : 1.0, 0.12);
+}
+
+function spawnBurst(
+  app: pc.Application,
+  particles: { entity: pc.Entity; vel: pc.Vec3; life: number }[],
+  center: pc.Vec3,
+  colors: number[],
+  count: number,
+  radius: number,
+  life: number,
+  size: number,
+) {
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 * i) / count;
-    const radius = synced ? 3.2 : 1.6;
     const speed = 1.0 + ((i * 7) % 9) * 0.09;
-    const entity = primitive(`spark-${Date.now()}-${i}`, 'sphere', [0, 4.5, -26], [0.12, 0.12, 0.12], mat(colors[i % colors.length], 1.0));
+    const entity = primitive(`spark-${Date.now()}-${i}`, 'sphere', [center.x, center.y, center.z], [size, size, size], mat(colors[i % colors.length], 1.0));
     app.root.addChild(entity);
     particles.push({
       entity,
       vel: new pc.Vec3(Math.cos(angle) * radius * speed, Math.sin(angle) * radius * speed + 1.2, -0.4),
-      life: synced ? 1.6 : 1.0,
+      life,
     });
   }
+}
+
+// ---------------------------------------------------------------- §5b verb layer
+
+type VerbLayer = {
+  notes: { id: number; atSec: number; lane: 0 | 1; entity: pc.Entity }[];
+  landmarks: { idx: number; atSec: number; entity: pc.Entity; litParts: pc.Entity[]; lit: boolean }[];
+};
+
+function createVerbLayer(app: pc.Application, rideSeed: number, road: RoadId): VerbLayer {
+  const schedule = buildRideSchedule(rideSeed);
+
+  const orbMat = unlitMat(0xffefc0);
+  const notes = schedule.notes.map((n) => {
+    const g = new pc.Entity(`note-${n.id}`);
+    const core = primitive('core', 'sphere', [0, 0.1, 0], [0.3, 0.34, 0.3], orbMat);
+    g.addChild(core);
+    const halo = primitive('halo', 'sphere', [0, 0.1, 0], [0.85, 0.9, 0.85], glowMat(0xffd166, 0.3));
+    g.addChild(halo);
+    const stem = primitive('stem', 'box', [0.11, 0.42, 0], [0.045, 0.36, 0.045], orbMat);
+    g.addChild(stem); // crude eighth-note silhouette
+    g.enabled = false;
+    app.root.addChild(g);
+    return { ...n, entity: g };
+  });
+
+  const landmarks = schedule.landmarks.map((l) => {
+    const { entity, litParts } = createLandmark(road);
+    entity.enabled = false;
+    app.root.addChild(entity);
+    return { idx: l.idx, atSec: l.atSec, entity, litParts, lit: false };
+  });
+
+  return { notes, landmarks };
+}
+
+// per-theme landmark; litParts start disabled and glow on when both riders flash
+function createLandmark(road: RoadId): { entity: pc.Entity; litParts: pc.Entity[] } {
+  const g = new pc.Entity('landmark');
+  const litParts: pc.Entity[] = [];
+  const warmGlow = (pos: V3, scale: V3, opacity = 0.5) => {
+    const p = primitive('lit', 'sphere', pos, scale, glowMat(0xffc97a, opacity));
+    p.enabled = false;
+    g.addChild(p);
+    litParts.push(p);
+    return p;
+  };
+
+  if (road === 'desert') {
+    // route arch over the road
+    const m = mat(0x8a4a30, 0.04);
+    child(g, 'box', [-2.1, 0.9, 0], [0.3, 3.0, 0.3], m);
+    child(g, 'box', [2.1, 0.9, 0], [0.3, 3.0, 0.3], m);
+    child(g, 'box', [0, 2.5, 0], [4.8, 0.35, 0.3], m);
+    child(g, 'box', [0, 2.5, 0.02], [2.2, 0.22, 0.28], mat(0xe8dcc0, 0.15));
+    warmGlow([-2.1, 2.75, 0], [0.3, 0.3, 0.3]);
+    warmGlow([2.1, 2.75, 0], [0.3, 0.3, 0.3]);
+    warmGlow([0, 2.5, 0], [4.4, 0.5, 0.5], 0.18);
+  } else if (road === 'coast') {
+    // lighthouse just off the road
+    const white = mat(0xf2efe6, 0.1);
+    const red = mat(0xc4503c, 0.08);
+    child(g, 'cylinder', [4.6, 1.2, 0], [0.95, 3.8, 0.95], white);
+    child(g, 'cylinder', [4.6, 1.0, 0], [0.97, 0.5, 0.97], red);
+    child(g, 'cylinder', [4.6, 2.2, 0], [0.97, 0.5, 0.97], red);
+    child(g, 'cylinder', [4.6, 3.25, 0], [0.6, 0.4, 0.6], mat(0x2a2c38, 0));
+    child(g, 'cone', [4.6, 3.65, 0], [0.7, 0.5, 0.7], red);
+    warmGlow([4.6, 3.3, 0], [0.45, 0.4, 0.45], 0.9);
+    warmGlow([4.6, 3.3, 0], [1.6, 1.3, 1.6], 0.18);
+  } else if (road === 'mountain') {
+    // stone gate with lanterns
+    const stone = mat(0x8b97a0, 0);
+    child(g, 'box', [-2.2, 0.5, 0], [0.7, 2.2, 0.7], stone);
+    child(g, 'box', [2.2, 0.5, 0], [0.7, 2.2, 0.7], stone);
+    child(g, 'box', [0, 1.8, 0], [5.2, 0.4, 0.6], stone);
+    child(g, 'sphere', [-2.2, 1.85, 0], [0.34, 0.3, 0.34], mat(0x4a4540, 0));
+    child(g, 'sphere', [2.2, 1.85, 0], [0.34, 0.3, 0.34], mat(0x4a4540, 0));
+    warmGlow([-2.2, 1.85, 0], [0.4, 0.36, 0.4], 0.7);
+    warmGlow([2.2, 1.85, 0], [0.4, 0.36, 0.4], 0.7);
+  } else {
+    // grand torii spanning the road
+    const verm = mat(0xc23b22, 0.12);
+    child(g, 'cylinder', [-2.3, 1.3, 0], [0.34, 3.4, 0.34], verm);
+    child(g, 'cylinder', [2.3, 1.3, 0], [0.34, 3.4, 0.34], verm);
+    child(g, 'box', [0, 3.1, 0], [5.9, 0.34, 0.45], verm);
+    child(g, 'box', [0, 2.55, 0], [5.0, 0.22, 0.3], verm);
+    child(g, 'box', [0, 3.38, 0], [6.3, 0.16, 0.5], mat(0x1d2130, 0));
+    warmGlow([-1.2, 2.3, 0], [0.3, 0.36, 0.3], 0.8);
+    warmGlow([1.2, 2.3, 0], [0.3, 0.36, 0.3], 0.8);
+    warmGlow([0, 2.8, 0], [4.6, 1.2, 1.2], 0.12);
+  }
+
+  return { entity: g, litParts };
 }
 
 // ---------------------------------------------------------------- mesh builder (flat-shaded, vertex-colored)
