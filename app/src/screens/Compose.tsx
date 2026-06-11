@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DRIVER_OPTIONS,
   MOOD_WORDS,
   PASSENGER_OPTIONS,
+  WHISPER_EXAMPLES,
+  WHISPER_MAX_CHARS,
+  WHISPER_MAX_TRIES,
   type DriverChoices,
   type PassengerChoices,
 } from '@roadie/shared';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
+import { track } from '../lib/analytics';
 
 type AnyChoices = Partial<DriverChoices & PassengerChoices>;
 
@@ -21,9 +25,45 @@ export default function Compose() {
   const peerChoices = useRoom((s) => s.peerChoices);
   const send = useRoom((s) => s.send);
 
+  const whisperCards = useRoom((s) => s.whisperCards);
+  const whisperRejectedAt = useRoom((s) => s.whisperRejectedAt);
+
   const [ownSeed, setOwnSeed]     = useState<string | null>(null);
   const [ownChoices, setOwnChoices] = useState<AnyChoices>({});
   const [isReady, setIsReady]     = useState(false);
+  const [whisperText, setWhisperText] = useState('');
+  const [whisperTries, setWhisperTries] = useState(0);
+  const [whisperPending, setWhisperPending] = useState(false);
+  const [whisperExample] = useState(() => WHISPER_EXAMPLES[Math.floor(Math.random() * WHISPER_EXAMPLES.length)]);
+
+  const [whisperFailed, setWhisperFailed] = useState(false);
+
+  const ownCard = you ? whisperCards[you] : undefined;
+  const peerCard = you ? whisperCards[you === 'driver' ? 'passenger' : 'driver'] : undefined;
+
+  useEffect(() => {
+    if (!ownCard) return;
+    setWhisperPending(false);
+    setWhisperFailed(false);
+    track('whisper_tuned', { style: ownCard.style });
+  }, [ownCard]);
+
+  useEffect(() => {
+    if (whisperRejectedAt === 0) return;
+    setWhisperPending(false);
+    setWhisperFailed(true);
+    track('whisper_rejected');
+  }, [whisperRejectedAt]);
+
+  function submitWhisper() {
+    const text = whisperText.trim();
+    if (!text || whisperPending || whisperTries >= WHISPER_MAX_TRIES) return;
+    setWhisperTries((n) => n + 1);
+    setWhisperPending(true);
+    setWhisperFailed(false);
+    send({ t: 'whisper', text });
+    track('whisper_submitted');
+  }
 
   const peer = riders.find((r) => r.role !== you);
   const peerSeed = peerChoices['seed'] ?? null;
@@ -124,6 +164,54 @@ export default function Compose() {
             </div>
           </div>
         ))}
+      </Section>
+
+      {/* §5a Tune the radio — optional free text, LLM-gated server-side */}
+      <Section title="TUNE THE RADIO (OPTIONAL)">
+        <p className="mb-2 text-xs text-white/35">
+          whisper a vibe to the radio — it tunes your words into the song
+        </p>
+        {ownCard ? (
+          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+            <p className="text-xs" style={{ color: identity?.color }}>
+              📻 tuned to: <span className="font-semibold">{ownCard.style}</span>
+            </p>
+          </div>
+        ) : null}
+        {!ownCard || whisperTries < WHISPER_MAX_TRIES ? (
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={whisperText}
+              maxLength={WHISPER_MAX_CHARS}
+              placeholder={`e.g. ${whisperExample}`}
+              onChange={(e) => setWhisperText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitWhisper(); }}
+              disabled={whisperPending || whisperTries >= WHISPER_MAX_TRIES}
+              className="min-w-0 flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-white/30 focus:outline-none disabled:opacity-50"
+            />
+            <button
+              onClick={submitWhisper}
+              disabled={!whisperText.trim() || whisperPending || whisperTries >= WHISPER_MAX_TRIES}
+              className="rounded-lg border border-white/12 px-3 py-2 text-sm text-white/70 transition active:scale-95 disabled:opacity-40"
+            >
+              {whisperPending ? 'tuning…' : ownCard ? 're-tune' : 'tune in'}
+            </button>
+          </div>
+        ) : null}
+        {whisperFailed && (
+          <p className="mt-2 text-xs text-amber-400/80">
+            static… the radio couldn't tune to that. try different words?
+          </p>
+        )}
+        {whisperTries >= WHISPER_MAX_TRIES && !ownCard && (
+          <p className="mt-2 text-xs text-white/30">the radio's had enough fiddling for one ride</p>
+        )}
+        {peerCard && (
+          <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
+            {peerCard.glyph} tuned the radio to <span className="font-semibold">{peerCard.style}</span>
+          </p>
+        )}
       </Section>
 
       {/* Peer's choices (read-only, appear as they land) */}

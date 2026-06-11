@@ -5,11 +5,15 @@ import {
   DRIVER_OPTIONS,
   PASSENGER_OPTIONS,
   pickDestinationForRoom,
+  WHISPER_MAX_CHARS,
+  WHISPER_MAX_TRIES,
   type DriverChoices,
   type PassengerChoices,
+  type RadioStyles,
   type Recipe,
 } from '@roadie/shared';
 import { FalMiniMaxGenerator, MockMusicGenerator, type MusicGenerator, type MusicGeneratorInput } from './music';
+import { FalLlmTranslator, MockWhisperTranslator, type WhisperTranslator } from './whisper';
 
 type Participant = {
   userId: string; // server-side only — never sent to peer (§6)
@@ -30,6 +34,11 @@ export default class RideRoom implements Party.Server {
   private generationInput: ReturnType<typeof buildPrompt> | null = null;
   private readonly destination: Destination;
 
+  // §5a "tune the radio" — minted style descriptors only, never raw text
+  private radioStyles: RadioStyles = {};
+  private whisperCounts = new Map<string, number>();
+  private readonly translator: WhisperTranslator;
+
   // Generation (M3)
   private audioUrl: string | null = null;
   private rideStartAt: number | null = null;
@@ -49,6 +58,7 @@ export default class RideRoom implements Party.Server {
     const useMock  = mockMode === 'true' || !falKey;
     this.destination = pickDestinationForRoom(room.id);
     this.generator = useMock ? new MockMusicGenerator() : new FalMiniMaxGenerator(falKey!);
+    this.translator = useMock ? new MockWhisperTranslator() : new FalLlmTranslator(falKey!);
     console.log(`[room] generator=${useMock ? 'mock (no charges)' : 'fal.ai MiniMax'} destination=${this.destination.id}`);
   }
 
@@ -59,6 +69,7 @@ export default class RideRoom implements Party.Server {
       case 'join':   return this.handleJoin(msg, sender);
       case 'seed':   return this.handleSeed(msg, sender);
       case 'choice': return this.handleChoice(msg, sender);
+      case 'whisper': return this.handleWhisper(msg, sender);
       case 'ready':  return this.handleReady(sender);
       case 'ping':    return this.handlePing(msg, sender);
       case 'gesture': return this.handleGesture(msg, sender);
@@ -127,6 +138,40 @@ export default class RideRoom implements Party.Server {
     this.broadcastState();
   }
 
+  // §5a — gate + translate free text; only the minted style card is ever shared
+  private handleWhisper(msg: Extract<ClientMsg, { t: 'whisper' }>, sender: Party.Connection): void {
+    const p = this.participants.get(sender.id);
+    if (!p || this.phase !== 'lobby') return;
+    const text = msg.text.trim().slice(0, WHISPER_MAX_CHARS);
+    if (!text) return;
+    const count = this.whisperCounts.get(sender.id) ?? 0;
+    if (count >= WHISPER_MAX_TRIES) return; // bounds LLM spend per rider
+    this.whisperCounts.set(sender.id, count + 1);
+
+    this.translator
+      .translate(text)
+      .then((res) => {
+        if (this.phase !== 'lobby') return; // generation already fired — too late
+        if (!res.ok || !res.style) {
+          this.room.getConnection(sender.id)?.send(
+            JSON.stringify({ t: 'whisperRejected' } satisfies RoomMsg),
+          );
+          return;
+        }
+        this.radioStyles[p.role] = res.style;
+        const card: RoomMsg = { t: 'whisperCard', role: p.role, glyph: p.glyph, style: res.style };
+        for (const connId of this.participants.keys()) {
+          this.room.getConnection(connId)?.send(JSON.stringify(card));
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[room] whisper_translate_failed:', err);
+        this.room.getConnection(sender.id)?.send(
+          JSON.stringify({ t: 'whisperRejected' } satisfies RoomMsg),
+        );
+      });
+  }
+
   private handleReady(sender: Party.Connection): void {
     if (!this.hasAllChoices(sender.id) || this.phase !== 'lobby') return;
     this.readyConnIds.add(sender.id);
@@ -152,6 +197,7 @@ export default class RideRoom implements Party.Server {
       this.driverChoices as DriverChoices,
       this.passengerChoices as PassengerChoices,
       this.destination,
+      this.radioStyles,
     );
     this.phase = 'generating';
     this.broadcastState();

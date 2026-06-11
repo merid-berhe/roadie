@@ -21,6 +21,8 @@ export type ClientMsg =
   | { t: 'seed'; word: string }
   | { t: 'road'; roadId: string }  // legacy scene debug control
   | { t: 'choice'; field: string; value: string }
+  // §5a "tune the radio" — raw text goes ONLY to the room's LLM gate, never to the peer
+  | { t: 'whisper'; text: string }
   | { t: 'ready' }
   | { t: 'ping'; sentAt: number } // clock offset estimation (§9)
   // --- M5+ ---
@@ -44,6 +46,9 @@ export type RoomMsg =
     }
   | { t: 'roomFull' }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
+  // §5a — the minted style card (translated descriptor, never raw text); sent to both riders
+  | { t: 'whisperCard'; role: Role; glyph: string; style: string }
+  | { t: 'whisperRejected' } // sender only — gate said no (abuse/unusable)
   | { t: 'generationFailed'; reason: string }
   | { t: 'pong'; sentAt: number; serverTime: number }
   | { t: 'nameWord'; glyph: string; word: string }

@@ -33,6 +33,9 @@ type RoomState = {
   fireworkAt: number;
   peerNameWord: string | null;
   selectedRoad: string;
+  // §5a "tune the radio" — minted style cards by role (never raw text)
+  whisperCards: Partial<Record<Role, { glyph: string; style: string }>>;
+  whisperRejectedAt: number;
   // Plumbing
   send: (msg: ClientMsg) => void;
   ingest: (msg: RoomMsg) => void;
@@ -69,6 +72,8 @@ const initial = {
   fireworkAt: 0,
   peerNameWord: null as string | null,
   selectedRoad: 'desert' as string,
+  whisperCards: {} as Partial<Record<Role, { glyph: string; style: string }>>,
+  whisperRejectedAt: 0,
   send: noop,
 };
 
@@ -112,6 +117,12 @@ export const useRoom = create<RoomState>((set) => ({
           return { fireworkSynced: msg.synced, fireworkAt: Date.now() };
         case 'nameWord':
           return { peerNameWord: msg.word };
+        case 'whisperCard':
+          return {
+            whisperCards: { ...state.whisperCards, [msg.role]: { glyph: msg.glyph, style: msg.style } },
+          };
+        case 'whisperRejected':
+          return { whisperRejectedAt: Date.now() };
         case 'peerRoad':
           return { selectedRoad: msg.roadId };
         default:

@@ -15,10 +15,30 @@ export type PassengerChoices = {
   texture: 'clean' | 'lush' | 'lo-fi';
 };
 
+/** Minted style descriptors from the whisper gate (§5a) — never raw player text. */
+export type RadioStyles = {
+  driver?: string;
+  passenger?: string;
+};
+
 export type Recipe = {
   driver: { seed: string } & DriverChoices;
   passenger: { seed: string } & PassengerChoices;
+  radio?: RadioStyles;
 };
+
+// §5a "tune the radio" — optional free text, gated + translated by an LLM
+// server-side. Raw text never reaches the music API or the other player.
+export const WHISPER_MAX_CHARS = 100;
+export const WHISPER_MAX_TRIES = 3;
+
+export const WHISPER_EXAMPLES = [
+  'early-70s soul with warm electric piano',
+  'like a rainy night in a Tokyo taxi',
+  'desert blues, dusty and slow',
+  "my dad's garage band on a Sunday",
+  'strings like the first day of summer',
+] as const;
 
 export const MOOD_WORDS = [
   'golden-hour',
@@ -54,14 +74,17 @@ export function buildPrompt(
   d: DriverChoices,
   p: PassengerChoices,
   destination?: Destination,
+  radio?: RadioStyles,
 ): { prompt: string; bpm: number; durationSec: number; recipe: Recipe } {
   const place = destination
     ? `${destination.promptFlavor}, inspired by ${destination.name}, ${destination.country}, `
     : '';
+  const radioBits = [radio?.driver, radio?.passenger].filter(Boolean).join('; ');
+  const tuned = radioBits ? `${radioBits}, ` : '';
 
   return {
     prompt:
-      `Instrumental, ${seedDriver} + ${seedPassenger} mood, ${place}${d.groove} groove, ` +
+      `Instrumental, ${seedDriver} + ${seedPassenger} mood, ${place}${tuned}${d.groove} groove, ` +
       `${d.energy} energy, ${p.lead_instrument} lead, ${p.brightness} tone, ${p.texture} texture, ` +
       `relaxing road-trip feel, no vocals`,
     bpm: tempoToBpm(d.tempo),
@@ -69,6 +92,7 @@ export function buildPrompt(
     recipe: {
       driver: { seed: seedDriver, ...d },
       passenger: { seed: seedPassenger, ...p },
+      ...(radioBits ? { radio } : {}),
     },
   };
 }
