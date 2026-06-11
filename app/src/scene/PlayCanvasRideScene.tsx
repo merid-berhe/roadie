@@ -24,7 +24,6 @@ const WORLD_SPEED = 7;
 const ROAD_TOP = -0.57;   // y of the road surface
 const CAR_Z = -1.0;       // the hero car sits here, facing +z
 const BAND = FAR / 2;     // props live in z ∈ [−BAND, +BAND] around the car (the camera orbits)
-const ORBIT_SECONDS = 48; // one slow cinematic revolution
 const TERRAIN_AHEAD = 220;
 
 type Theme = {
@@ -138,7 +137,7 @@ export default function PlayCanvasRideScene({
     if (!mount) return;
 
     const canvas = document.createElement('canvas');
-    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block';
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none';
     mount.appendChild(canvas);
 
     const app = new pc.Application(canvas, {
@@ -167,8 +166,35 @@ export default function PlayCanvasRideScene({
       nearClip: 0.05,
       farClip: 420,
     });
-    // the camera orbits the car (see update loop); narrow viewports pull back
+    // each player freely orbits the car by dragging (local-only — camera angle
+    // is presentation, not room state); narrow viewports pull back
     let aspectK = 1;
+    let yaw = 0; // 0 = ahead of the car, looking back at the riders
+    let yawVel = 0;
+    let dragging = false;
+    let lastX = 0;
+    let lastMoveAt = 0;
+    const onPointerDown = (e: PointerEvent) => {
+      dragging = true;
+      lastX = e.clientX;
+      yawVel = 0;
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+      const now = performance.now();
+      const dtMs = Math.max(8, now - lastMoveAt);
+      lastMoveAt = now;
+      yaw -= dx * 0.006;
+      yawVel = Math.max(-3, Math.min(3, (-dx * 0.006) / (dtMs / 1000)));
+    };
+    const onPointerUp = () => { dragging = false; };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
     camera.setPosition(0, 1.7, CAR_Z + 5.8);
     camera.lookAt(0, 0.45, CAR_Z);
     app.root.addChild(camera);
@@ -241,14 +267,18 @@ export default function PlayCanvasRideScene({
 
       // slow cinematic orbit: low at the front/back, lifted at the sides to
       // clear roadside props. the car gets the life — gentle bob and roll.
-      const th = (elapsed / ORBIT_SECONDS) * Math.PI * 2;
-      const sx = Math.sin(th);
-      // low cinematic shot at front/back, rising to a brief aerial beat at the
-      // sides (the corridor beside the road is too narrow for a low side shot)
+      // drag-controlled orbit with glide; the camera rides a guarded rail —
+      // low at front/back, lifted at the sides (the corridor beside the road
+      // is too narrow for a low side shot)
+      if (!dragging) {
+        yaw += yawVel * dt;
+        yawVel *= Math.exp(-dt * 3.2);
+      }
+      const sx = Math.sin(yaw);
       camera.setPosition(
         sx * 3.8,
         1.7 + sx * sx * 3.7 + (aspectK - 1) * 0.75,
-        CAR_Z + Math.cos(th) * 5.8 * aspectK,
+        CAR_Z + Math.cos(yaw) * 5.8 * aspectK,
       );
       camera.lookAt(0, 0.45, CAR_Z);
       carRig.setLocalPosition(Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
@@ -285,6 +315,10 @@ export default function PlayCanvasRideScene({
 
     return () => {
       observer.disconnect();
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerUp);
       app.destroy();
       canvas.remove();
     };
