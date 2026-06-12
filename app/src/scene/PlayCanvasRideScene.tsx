@@ -41,7 +41,9 @@ const ROWS = FAR / CELL;  // 39
 const WORLD_SPEED = 7;
 const ROAD_TOP = -0.57;   // y of the road surface
 const ROAD_HALF = 2.7;    // v5.5: two real lanes — the car occupies one comfortably
-const CAR_X = 1.35;       // centred in the right lane
+// v5.7: the car drives on ITS right (US-style) — facing +z, its right is −x,
+// so from the front camera it correctly occupies the viewer's LEFT lane
+const CAR_X = -1.35;
 const CAR_Z = -1.0;       // the hero car sits here, facing +z
 const BAND = FAR / 2;     // props live in z ∈ [−BAND, +BAND] around the car (the camera orbits)
 const TERRAIN_AHEAD = 220;
@@ -1141,6 +1143,25 @@ function createCar(
       ROAD_TOP - rigPos.y - (min.y - rigPos.y) * s,
       -(center.z - rigPos.z) * s,
     );
+
+    // v5.7: ROADIE license plates front + rear (placed from measured bounds)
+    const halfLen = aabb.halfExtents.z * s;
+    const plateY = ROAD_TOP - rigPos.y + 0.36; // rig-local, just above the bumper line
+    const plateTex = new pc.Asset('plate-roadie', 'texture', { url: '/assets/cars/plate-roadie.png' });
+    plateTex.on('load', () => {
+      const m = new pc.StandardMaterial();
+      m.diffuseMap = plateTex.resource as pc.Texture;
+      m.emissiveMap = plateTex.resource as pc.Texture;
+      m.emissive = new pc.Color(0.3, 0.3, 0.3); // readable at dusk/night
+      m.update();
+      const front = primitive('plate-front', 'box', [0, plateY, halfLen + 0.012], [0.36, 0.09, 0.012], m);
+      rig.addChild(front);
+      const rear = primitive('plate-rear', 'box', [0, plateY, -halfLen - 0.012], [0.36, 0.09, 0.012], m);
+      rear.setLocalEulerAngles(0, 180, 0); // text reads correctly from behind
+      rig.addChild(rear);
+    });
+    app.assets.add(plateTex);
+    app.assets.load(plateTex);
   });
   asset.on('error', (err: string) => console.error('car glb failed:', err));
   app.assets.add(asset);
