@@ -38,6 +38,10 @@ export default function Arrival({ onDone }: Props) {
     setSaving(true);
 
     const glyphs = [driver?.glyph, passenger?.glyph].filter(Boolean) as string[];
+
+    // Both riders save independently but converge on ONE song row — the track
+    // file URL is the ride's natural key (unique index, v5.3).
+    let songId: string | null = null;
     const { data: song, error } = await supabase
       .from('songs')
       .insert({
@@ -51,11 +55,19 @@ export default function Arrival({ onDone }: Props) {
       .select('id')
       .single();
 
-    if (error || !song) { setSaving(false); onDone(null); return; }
+    if (song) {
+      songId = song.id;
+    } else if (error) {
+      // unique violation → the co-rider saved first; reuse their row
+      const { data: existing } = await supabase
+        .from('songs').select('id').eq('audio_url', audioUrl).single();
+      songId = existing?.id ?? null;
+    }
+    if (!songId) { setSaving(false); onDone(null); return; }
 
     if (destination) {
       const { error: treasureError } = await supabase.from('treasures').insert({
-        song_id: song.id,
+        song_id: songId,
         destination_id: destination.id,
         title,
         lat: destination.lat,
@@ -66,19 +78,22 @@ export default function Arrival({ onDone }: Props) {
         source_title_snapshot: destination.factSourceTitle,
         source_url_snapshot: destination.factSourceUrl,
       });
-      if (treasureError) {
+      if (treasureError && treasureError.code !== '23505') {
+        // 23505 = the co-rider already dropped it — not a failure
         console.warn('[treasure]', treasureError.message);
-        track('treasure_failed', { song_id: song.id, destination_id: destination.id, reason: treasureError.message });
-      } else {
-        track('treasure_dropped', { song_id: song.id, destination_id: destination.id });
+        track('treasure_failed', { song_id: songId, destination_id: destination.id, reason: treasureError.message });
+      } else if (!treasureError) {
+        track('treasure_dropped', { song_id: songId, destination_id: destination.id });
       }
     }
 
-    // Add a glovebox entry for each rider (both userIds stored in the ride row — best effort here)
-    await supabase.from('glovebox_entries').insert({ user_id: userId, song_id: song.id });
+    // Each rider files the shared song into their own glovebox
+    await supabase
+      .from('glovebox_entries')
+      .upsert({ user_id: userId, song_id: songId }, { onConflict: 'user_id,song_id', ignoreDuplicates: true });
 
-    track('song_saved', { title, song_id: song.id, destination_id: destination?.id });
-    onDone(song.id);
+    track('song_saved', { title, song_id: songId, destination_id: destination?.id });
+    onDone(songId);
   }
 
   return (

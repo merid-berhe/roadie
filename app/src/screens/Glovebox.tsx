@@ -31,7 +31,8 @@ export default function Glovebox({ onBack }: { onBack: () => void }) {
       .select('songs(*, destinations(name, country))')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.warn('[glovebox]', error.message);
         setSongs((data ?? []).map((r: { songs: unknown }) => r.songs as Song));
         setLoading(false);
       });

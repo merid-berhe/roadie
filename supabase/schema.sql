@@ -98,10 +98,15 @@ create table if not exists treasures (
 
 -- Glovebox: which users have which songs
 create table if not exists glovebox_entries (
-  user_id  uuid references users(id),
-  song_id  uuid references songs(id),
+  user_id    uuid references users(id),
+  song_id    uuid references songs(id),
+  created_at timestamptz default now(),
   primary key (user_id, song_id)
 );
+
+-- One song row per ride: both riders converge on the track file's URL (v5.3)
+create unique index if not exists songs_audio_url_key on songs (audio_url);
+create unique index if not exists treasures_song_id_key on treasures (song_id);
 
 -- Reports
 create table if not exists reports (
@@ -145,20 +150,8 @@ create policy "users: update own" on users for update using (auth.uid() = id);
 create policy "glovebox: read own" on glovebox_entries for select using (auth.uid() = user_id);
 create policy "glovebox: insert own" on glovebox_entries for insert with check (auth.uid() = user_id);
 
--- Songs: readable if you have a glovebox entry for it
-create policy "songs: read via glovebox" on songs for select using (
-  exists (
-    select 1 from glovebox_entries
-    where glovebox_entries.song_id = songs.id
-      and glovebox_entries.user_id = auth.uid()
-  )
-);
-create policy "songs: read via treasures" on songs for select using (
-  exists (
-    select 1 from treasures
-    where treasures.song_id = songs.id
-  )
-);
+-- Songs: public anonymous artifacts — the Radio reads them all (v5.3)
+create policy "songs: read all" on songs for select using (true);
 create policy "songs: insert authenticated" on songs for insert with check (auth.role() = 'authenticated');
 
 -- Rides: readable by participants
