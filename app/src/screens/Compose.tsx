@@ -5,6 +5,7 @@ import {
   PROMPT_MAX_CHARS,
   PROMPT_MAX_TRIES,
 } from '@roadie/shared';
+import { CharacterFace, characterName } from '../components/CharacterFace';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 import { track } from '../lib/analytics';
@@ -35,7 +36,9 @@ export default function Compose() {
   const [promptExample] = useState(() => PROMPT_EXAMPLES[Math.floor(Math.random() * PROMPT_EXAMPLES.length)]);
 
   const peer = riders.find((r) => r.role !== you);
+  const me = riders.find((r) => r.role === you);
   const peerRole = you === 'driver' ? 'passenger' : 'driver';
+  const peerName = characterName(peer?.character) ?? 'your co-rider';
   const peerSeed = peerChoices['seed'] ?? null;
   const peerSeeded = you ? seeded.includes(peerRole) : false;
   const peerReady = you ? readyRoles.includes(peerRole) : false;
@@ -92,9 +95,15 @@ export default function Compose() {
       <div className="mb-6 text-center">
         <p className="text-xs uppercase tracking-widest text-white/40">making your song</p>
         <div className="mt-3 flex items-center justify-center gap-6">
-          <span className="text-4xl" style={{ color: identity?.color }}>{identity?.glyph}</span>
+          <div className="flex flex-col items-center gap-1">
+            <CharacterFace id={me?.character} color={identity?.color} size={56} />
+            <p className="text-xs text-white/45">{characterName(me?.character) ?? 'you'}</p>
+          </div>
           <span className="text-sm text-white/30">+</span>
-          <span className="text-4xl" style={{ color: peer?.color ?? '#374151' }}>{peer?.glyph ?? '○'}</span>
+          <div className="flex flex-col items-center gap-1">
+            <CharacterFace id={peer?.character} color={peer?.color} size={56} />
+            <p className="text-xs text-white/45">{peer ? peerName : 'waiting…'}</p>
+          </div>
         </div>
       </div>
 
@@ -124,7 +133,7 @@ export default function Compose() {
         </div>
         {peerSeed && (
           <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peer?.glyph} picked <span className="font-semibold">{peerSeed}</span>
+            {peerName} picked <span className="font-semibold">{peerSeed}</span>
           </p>
         )}
         {!peerSeeded && !peerSeed && (
@@ -140,7 +149,7 @@ export default function Compose() {
         {ownCard && (
           <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
             <p className="text-xs" style={{ color: identity?.color }}>
-              {identity?.glyph} <span className="font-semibold">{ownCard.display}</span>
+              you wrote <span className="font-semibold">{ownCard.display}</span>
             </p>
           </div>
         )}
@@ -172,7 +181,7 @@ export default function Compose() {
         )}
         {peerCard && (
           <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peerCard.glyph} wrote <span className="font-semibold">{peerCard.display}</span>
+            {peerName} wrote <span className="font-semibold">{peerCard.display}</span>
           </p>
         )}
       </Section>
@@ -187,9 +196,9 @@ export default function Compose() {
           {bothVocals
             ? '🎤 you both want vocals — this song will sing'
             : peerWantsVocals
-            ? `${peer?.glyph} wants vocals — pick 🎤 to agree`
+            ? `${peerName} wants vocals — pick 🎤 to agree`
             : ownVocals
-            ? 'waiting for your co-rider to agree to vocals'
+            ? `waiting for ${peerName} to agree to vocals`
             : 'songs stay instrumental unless you both pick 🎤'}
         </p>
       </Section>
@@ -197,7 +206,7 @@ export default function Compose() {
       {/* Peer readiness */}
       {peerReady && (
         <p className="mb-4 text-center text-sm text-emerald-400">
-          {peer?.glyph} co-rider is ready to drive
+          {peerName} is ready to drive
         </p>
       )}
 

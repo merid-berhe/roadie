@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import { characterName } from '../components/CharacterFace';
 import { useSession } from '../state/session';
 
 type Song = {
@@ -93,7 +94,7 @@ export default function Glovebox({ onBack }: { onBack: () => void }) {
               <div className="flex-1 min-w-0">
                 <p className="truncate font-medium">{song.title ?? 'untitled'}</p>
                 <p className="text-xs text-white/40">
-                  {song.contributor_glyphs?.join(' + ')} · {place} · {date}
+                  {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ')} · {place} · {date}
                 </p>
               </div>
             </button>

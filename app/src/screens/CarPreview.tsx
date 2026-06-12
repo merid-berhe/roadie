@@ -8,6 +8,7 @@ import * as pc from 'playcanvas';
 const params = new URLSearchParams(window.location.search);
 const FILE = params.get('file') ?? 'cicada_flat.glb';
 const YAW = Number(params.get('yaw') ?? 35) || 35;
+const HEAD = params.has('head'); // v5.4 portrait-baking: frame the face
 
 export default function CarPreview() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -52,7 +53,7 @@ export default function CarPreview() {
     ground.setLocalScale(60, 0.1, 60);
     app.root.addChild(ground);
 
-    const asset = new pc.Asset(FILE, 'container', { url: `/assets/cars/${FILE}` });
+    const asset = new pc.Asset(FILE, 'container', { url: FILE.startsWith('/') ? FILE : `/assets/cars/${FILE}` });
     asset.on('load', () => {
       const car = (asset.resource as pc.ContainerResource).instantiateRenderEntity();
       app.root.addChild(car);
@@ -67,12 +68,14 @@ export default function CarPreview() {
       }
       car.setLocalPosition(0, -aabb.getMin().y, 0);
       const size = Math.max(aabb.halfExtents.x, aabb.halfExtents.y, aabb.halfExtents.z);
-      const dist = size * 3.2;
+      const height = aabb.halfExtents.y * 2;
+      const dist = HEAD ? height * 0.42 : size * 3.2;
       let yaw = YAW;
       const place = () => {
         const rad = (yaw * Math.PI) / 180;
-        camera.setPosition(Math.sin(rad) * dist, size * 0.9, Math.cos(rad) * dist);
-        camera.lookAt(0, size * 0.45, 0);
+        const lookY = HEAD ? height * 0.92 : size * 0.45;
+        camera.setPosition(Math.sin(rad) * dist, HEAD ? lookY : size * 0.9, Math.cos(rad) * dist);
+        camera.lookAt(0, lookY, 0);
       };
       place();
       app.mouse?.on(pc.EVENT_MOUSEMOVE, (e: pc.MouseEvent) => {

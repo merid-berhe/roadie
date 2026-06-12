@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { getPalette } from '../scene/palette';
 import type { RoadId } from '../scene/scenes';
 import { getActualPositionSec, nudgePlayback } from '../audio/player';
+import { characterName } from '../components/CharacterFace';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
@@ -81,6 +82,8 @@ export default function Riding() {
             positionSec={positionSec}
             driverColor={driver?.color ?? '#F5A623'}
             passengerColor={passenger?.color ?? '#1FB6C4'}
+            driverCharacter={driver?.character}
+            passengerCharacter={passenger?.character}
           />
         </Suspense>
       )}
@@ -94,9 +97,9 @@ export default function Riding() {
 
         {/* Attribution + role */}
         <div className="flex items-center gap-4">
-          {driver && <span className="text-xs" style={{ color: driver.color }}>{driver.glyph} {recipe?.driver.seed}</span>}
+          {driver && <span className="text-xs" style={{ color: driver.color }}>{characterName(driver.character) ?? driver.glyph} · {recipe?.driver.seed}</span>}
           <span className="text-xs text-white/20">×</span>
-          {passenger && <span className="text-xs" style={{ color: passenger.color }}>{passenger.glyph} {recipe?.passenger.seed}</span>}
+          {passenger && <span className="text-xs" style={{ color: passenger.color }}>{characterName(passenger.character) ?? passenger.glyph} · {recipe?.passenger.seed}</span>}
         </div>
         {destination && (
           <p className="max-w-[18rem] truncate text-xs text-white/35">

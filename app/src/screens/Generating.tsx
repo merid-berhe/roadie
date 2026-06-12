@@ -4,6 +4,7 @@ import type { RoadId } from '../scene/scenes';
 import type { DanceState } from '../scene/PlayCanvasRideScene';
 import { fadeBedIn, startBedSilent } from '../audio/bed';
 import { playFireworkAccent, playGestureSound } from '../audio/gestures';
+import { characterName } from '../components/CharacterFace';
 import { useRoom } from '../state/room';
 import { track } from '../lib/analytics';
 
@@ -69,6 +70,8 @@ export default function Generating() {
           positionSec={0}
           driverColor={driver?.color ?? '#F5A623'}
           passengerColor={passenger?.color ?? '#1FB6C4'}
+          driverCharacter={driver?.character}
+          passengerCharacter={passenger?.character}
           mode="meeting"
           driverDance={driverDance}
           passengerDance={passengerDance}
@@ -82,12 +85,12 @@ export default function Generating() {
         <div className="mt-1 max-w-md rounded-xl bg-black/45 px-4 py-3 text-center backdrop-blur-sm">
           {recipe?.driver.text && (
             <p className="text-sm" style={{ color: driver?.color }}>
-              {driver?.glyph} “{recipe.driver.text}”
+              {characterName(driver?.character) ?? driver?.glyph} “{recipe.driver.text}”
             </p>
           )}
           {recipe?.passenger.text && (
             <p className="text-sm" style={{ color: passenger?.color }}>
-              {passenger?.glyph} “{recipe.passenger.text}”
+              {characterName(passenger?.character) ?? passenger?.glyph} “{recipe.passenger.text}”
             </p>
           )}
           <p className="mt-1 text-xs text-white/50">

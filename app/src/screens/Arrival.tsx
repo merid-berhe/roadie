@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import { characterName } from '../components/CharacterFace';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
@@ -37,7 +38,8 @@ export default function Arrival({ onDone }: Props) {
     if (!title || saving || !supabase || !userId || !recipe || !audioUrl) return;
     setSaving(true);
 
-    const glyphs = [driver?.glyph, passenger?.glyph].filter(Boolean) as string[];
+    // v5.4: contributor column stores roster character ids (legacy rows hold glyphs)
+    const glyphs = [driver?.character ?? driver?.glyph, passenger?.character ?? passenger?.glyph].filter(Boolean) as string[];
 
     // Both riders save independently but converge on ONE song row — the track
     // file URL is the ride's natural key (unique index, v5.3).
@@ -113,12 +115,12 @@ export default function Arrival({ onDone }: Props) {
         <div className="flex flex-col gap-1 text-center text-sm">
           {driver && (
             <p style={{ color: driver.color }}>
-              {driver.glyph} {recipe.driver.text ? `“${recipe.driver.text}”` : `brought the ${recipe.driver.seed} mood`}
+              {characterName(driver.character) ?? driver.glyph} {recipe.driver.text ? `“${recipe.driver.text}”` : `brought the ${recipe.driver.seed} mood`}
             </p>
           )}
           {passenger && (
             <p style={{ color: passenger.color }}>
-              {passenger.glyph} {recipe.passenger.text ? `“${recipe.passenger.text}”` : `brought the ${recipe.passenger.seed} mood`}
+              {characterName(passenger.character) ?? passenger.glyph} {recipe.passenger.text ? `“${recipe.passenger.text}”` : `brought the ${recipe.passenger.seed} mood`}
             </p>
           )}
         </div>

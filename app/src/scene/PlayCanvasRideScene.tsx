@@ -4,7 +4,15 @@
 
 import { useEffect, useRef } from 'react';
 import * as pc from 'playcanvas';
-import type { DanceMove, GestureKind } from '@roadie/shared';
+import {
+  characterById,
+  DANCE_CLIPS,
+  IDLE_CLIP,
+  RIDE_CLIP,
+  type CharacterDef,
+  type DanceMove,
+  type GestureKind,
+} from '@roadie/shared';
 import type { RoadId } from './scenes';
 
 export type DanceState = { move: DanceMove; at: number } | null;
@@ -17,6 +25,9 @@ type Props = {
   driverGestureKind?: GestureKind | null;
   passengerGestureKind?: GestureKind | null;
   firework?: { synced: boolean } | null;
+  // v5.4 — roster characters dealt by the room
+  driverCharacter?: string;
+  passengerCharacter?: string;
   // §8d the Meeting — characters out of the car, dancing while the song presses
   mode?: 'ride' | 'meeting';
   driverDance?: DanceState;
@@ -123,6 +134,8 @@ export default function PlayCanvasRideScene({
   driverGestureKind,
   passengerGestureKind,
   firework,
+  driverCharacter = 'moss',
+  passengerCharacter = 'juno',
   mode = 'ride',
   driverDance = null,
   passengerDance = null,
@@ -229,7 +242,6 @@ export default function PlayCanvasRideScene({
     const moving: MovingEntity[] = [];
     const drifters: Drifter[] = [];
     const bobbers: Bobber[] = [];
-    const gestures: pc.Entity[] = [];
     const fireworks: { entity: pc.Entity; vel: pc.Vec3; life: number }[] = [];
     let lastFirework = fireworkRef.current;
 
@@ -238,7 +250,12 @@ export default function PlayCanvasRideScene({
     const heightAt = createTerrain(app, theme, road);
     createRoad(app, moving, theme);
     createThemeWorld(app, moving, drifters, bobbers, theme, road, heightAt);
-    const { rig: carRig, figures } = createCar(app, driverColorRef.current, passengerColorRef.current, gestures, mode);
+    const { rig: carRig, figures } = createCar(
+      app,
+      { color: driverColorRef.current, character: characterById(driverCharacter) },
+      { color: passengerColorRef.current, character: characterById(passengerCharacter) },
+      mode,
+    );
     let lastDanceSyncSeen = danceSyncedAtRef.current;
 
     const resize = () => {
@@ -303,7 +320,8 @@ export default function PlayCanvasRideScene({
       carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
       carShadow?.setLocalPosition(0, ROAD_TOP + 0.006, CAR_Z);
 
-      // §8d the Meeting: characters dance beside the parked car
+      // §8d the Meeting: characters dance beside the parked car (real clips
+      // when the character has one for the move, procedural wiggle otherwise)
       if (mode === 'meeting' && figures) {
         animateDancer(figures.driver, driverDanceRef.current, elapsed, 0);
         animateDancer(figures.passenger, passengerDanceRef.current, elapsed, 2.1);
@@ -316,8 +334,6 @@ export default function PlayCanvasRideScene({
           );
         }
       }
-
-      updateCapsuleGestures(gestures, driverGestureRef.current, passengerGestureRef.current);
 
       const fw = fireworkRef.current;
       if (fw && fw !== lastFirework) {
@@ -916,44 +932,168 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
   addBox(app, 'walk-r', [2.95, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
 }
 
-// ---------------------------------------------------------------- the hero car
+// ---------------------------------------------------------------- the hero car & characters
 
-type DancerFig = { root: pc.Entity; hand: pc.Entity | null; baseX: number; baseY: number; baseZ: number };
+type RiderSpec = { color: string; character: CharacterDef | null };
+
+// a loaded roster character: wrapper entity + clip player (v5.4)
+type CharacterHandle = {
+  root: pc.Entity;
+  def: CharacterDef;
+  play: (clipSuffix: string, fade?: number) => boolean;
+  hasClip: (clipSuffix: string) => boolean;
+};
+
+type DancerFig = {
+  handle: CharacterHandle;
+  baseX: number;
+  baseY: number;
+  baseZ: number;
+  /** when a clip-dance is running, procedural wiggle is suppressed until this */
+  clipUntil: number;
+};
+
+const CHARACTER_STAND_HEIGHT = 1.18; // next to the cartoon-proportioned car
+const RIDE_SEAT_Y = -0.05;           // wrapper y inside the rig (feet sink into the floorpan)
+const RIDE_SEAT_Y_STANDING = -0.3;   // characters without a Sitting clip ride lower
+
+function loadCharacter(app: pc.Application, spec: RiderSpec, name: string): CharacterHandle {
+  const def = spec.character ?? { id: 'moss', name: 'Moss', file: 'man-longsleeves.glb', set: 'men' as const };
+  const root = new pc.Entity(`character-${name}`);
+  const tracks = new Map<string, pc.AnimTrack>();
+  const assigned = new Set<string>();
+  let animEntity: pc.Entity | null = null;
+  let pendingClip: string | null = null;
+
+  const findTrack = (suffix: string): pc.AnimTrack | undefined => {
+    for (const [key, t] of tracks) if (key === suffix || key.endsWith(suffix)) return t;
+    return undefined;
+  };
+
+  const play = (clipSuffix: string, fade = 0.25): boolean => {
+    if (!animEntity) { pendingClip = clipSuffix; return true; } // queue until loaded
+    const track = findTrack(clipSuffix);
+    if (!track) return false;
+    try {
+      if (!assigned.has(clipSuffix)) {
+        animEntity.anim?.assignAnimation(clipSuffix, track);
+        assigned.add(clipSuffix);
+      }
+      const layer = animEntity.anim?.baseLayer;
+      if (layer && layer.activeState !== clipSuffix) layer.transition(clipSuffix, fade);
+    } catch {
+      // hard fallback: rebuild the component with just this clip
+      animEntity.removeComponent('anim');
+      animEntity.addComponent('anim', { activate: true });
+      animEntity.anim?.assignAnimation(clipSuffix, track);
+      assigned.clear();
+      assigned.add(clipSuffix);
+    }
+    return true;
+  };
+
+  const asset = new pc.Asset(`char-${def.id}`, 'container', { url: `/assets/characters/roster/${def.file}` });
+  asset.on('load', () => {
+    // typings omit `animations`, but container resources expose the clip assets
+    const container = asset.resource as pc.ContainerResource & { animations?: pc.Asset[] };
+    const model = container.instantiateRenderEntity();
+    root.addChild(model);
+
+    // normalize: feet at wrapper origin, standing height ~CHARACTER_STAND_HEIGHT
+    const aabb = new pc.BoundingBox();
+    let first = true;
+    for (const render of model.findComponents('render') as pc.RenderComponent[]) {
+      for (const mi of render.meshInstances) {
+        if (first) { aabb.copy(mi.aabb); first = false; }
+        else aabb.add(mi.aabb);
+      }
+    }
+    const rootPos = root.getPosition().clone();
+    const height = Math.max(0.01, aabb.halfExtents.y * 2);
+    const s = CHARACTER_STAND_HEIGHT / height;
+    model.setLocalScale(s, s, s);
+    model.setLocalPosition(
+      -(aabb.center.x - rootPos.x) * s,
+      -(aabb.getMin().y - rootPos.y) * s,
+      -(aabb.center.z - rootPos.z) * s,
+    );
+
+    // materials: tint the outfit accent to the rider color + lift everything
+    // slightly emissive so faces read at dusk (the car playbook)
+    const accentNames = def.set === 'men'
+      ? ['Shirt']
+      : ['Pink', 'LightBlue', 'Blue', 'Red', 'Green', 'Purple', 'Orange', 'Yellow', 'Cyan'];
+    const riderCol = color(colorToNumber(spec.color), 1);
+    const seen = new Set<pc.Material>();
+    for (const render of model.findComponents('render') as pc.RenderComponent[]) {
+      for (const mi of render.meshInstances) {
+        const m = mi.material as pc.StandardMaterial;
+        if (seen.has(m)) continue;
+        seen.add(m);
+        if (accentNames.includes(m.name)) {
+          m.diffuse = riderCol;
+          m.emissive = new pc.Color(riderCol.r * 0.25, riderCol.g * 0.25, riderCol.b * 0.25);
+        } else {
+          m.emissive = new pc.Color(m.diffuse.r * 0.22, m.diffuse.g * 0.22, m.diffuse.b * 0.22);
+        }
+        m.update();
+      }
+    }
+
+    // animation: register all baked clips by suffix ("HumanArmature|Man_Idle" → "Idle")
+    for (const animAsset of container.animations ?? []) {
+      const track = animAsset.resource as pc.AnimTrack;
+      const raw = track.name ?? animAsset.name ?? '';
+      const suffix = raw.split('|').pop()!.replace(/^Man_/, '');
+      tracks.set(suffix, track);
+    }
+    model.addComponent('anim', { activate: true });
+    animEntity = model;
+    if (pendingClip) { const c = pendingClip; pendingClip = null; play(c, 0); }
+  });
+  asset.on('error', (err: string) => console.error(`character ${def.id} failed:`, err));
+  app.assets.add(asset);
+  app.assets.load(asset);
+
+  return { root, def, play, hasClip: (s) => !!findTrack(s) };
+}
 
 function createCar(
   app: pc.Application,
-  driverColor: string,
-  passengerColor: string,
-  gestures: pc.Entity[],
+  driver: RiderSpec,
+  passenger: RiderSpec,
   mode: 'ride' | 'meeting',
 ): { rig: pc.Entity; figures: { driver: DancerFig; passenger: DancerFig } | null } {
   const rig = new pc.Entity('car-rig');
   rig.setLocalPosition(0, 0, CAR_Z);
   app.root.addChild(rig);
 
+  const dHandle = loadCharacter(app, driver, 'driver');
+  const pHandle = loadCharacter(app, passenger, 'passenger');
+
   let figures: { driver: DancerFig; passenger: DancerFig } | null = null;
   if (mode === 'ride') {
-    // occupants are placed synchronously so they exist even while the GLB streams in.
-    // they face +z (toward the camera); car cabin sits just behind the car's centre.
-    // the model is LHD — wheel on the car's left, the viewer's right from the front
-    const driver = createOccupant(rig, 'driver', [0, 0, 0], driverColor, gestures, 'man', 'seated');
-    driver.setLocalPosition(0.3, 0.28, 0.18);
-    driver.setLocalEulerAngles(0, 180, 0);
-    const passenger = createOccupant(rig, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman', 'seated');
-    passenger.setLocalPosition(-0.3, 0.28, 0.18);
-    passenger.setLocalEulerAngles(0, 180, 0);
+    // seated in the cabin, facing +z (the model is LHD — wheel viewer-right).
+    // characters without a Sitting clip play Idle sunk lower — only chest-up
+    // shows through the windshield, legs hide inside the opaque car body.
+    for (const [handle, x] of [[dHandle, 0.3], [pHandle, -0.3]] as const) {
+      const hasSit = RIDE_CLIP[handle.def.set] === 'Sitting';
+      handle.root.setLocalPosition(x, hasSit ? RIDE_SEAT_Y : RIDE_SEAT_Y_STANDING, 0.14);
+      rig.addChild(handle.root);
+      handle.play(RIDE_CLIP[handle.def.set], 0);
+    }
   } else {
-    // §8d the Meeting: both riders stand beside the parked car, facing the camera
-    const standY = ROAD_TOP + 0.57; // legs reach the road surface
-    const driver = createOccupant(app.root as pc.Entity, 'driver', [0, 0, 0], driverColor, gestures, 'man', 'standing');
-    driver.setLocalPosition(1.5, standY, CAR_Z + 0.9);
-    driver.setLocalEulerAngles(0, 180, 0);
-    const passenger = createOccupant(app.root as pc.Entity, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman', 'standing');
-    passenger.setLocalPosition(-1.5, standY, CAR_Z + 0.9);
-    passenger.setLocalEulerAngles(0, 180, 0);
+    // §8d the Meeting: both stand beside the parked car, facing the camera
+    const standY = ROAD_TOP;
+    dHandle.root.setLocalPosition(1.5, standY, CAR_Z + 0.9);
+    pHandle.root.setLocalPosition(-1.5, standY, CAR_Z + 0.9);
+    app.root.addChild(dHandle.root);
+    app.root.addChild(pHandle.root);
+    dHandle.play(IDLE_CLIP[dHandle.def.set], 0);
+    pHandle.play(IDLE_CLIP[pHandle.def.set], 0);
     figures = {
-      driver: { root: driver, hand: driver.findByName('driver-gesture') as pc.Entity | null, baseX: 1.5, baseY: standY, baseZ: CAR_Z + 0.9 },
-      passenger: { root: passenger, hand: passenger.findByName('passenger-gesture') as pc.Entity | null, baseX: -1.5, baseY: standY, baseZ: CAR_Z + 0.9 },
+      driver: { handle: dHandle, baseX: 1.5, baseY: standY, baseZ: CAR_Z + 0.9, clipUntil: 0 },
+      passenger: { handle: pHandle, baseX: -1.5, baseY: standY, baseZ: CAR_Z + 0.9, clipUntil: 0 },
     };
   }
 
@@ -1007,31 +1147,48 @@ function createCar(
   return { rig, figures };
 }
 
-// §8d — procedural dance: short move animations over a gentle idle bob
+// §8d — dance: play the character's real clip for the move when it has one,
+// fall back to a procedural wiggle otherwise. Idle keeps a soft root sway.
 const DANCE_DUR_SEC = 1.6;
+const CLIP_DANCE_SEC = 2.3;
 
 function animateDancer(fig: DancerFig, dance: DanceState, elapsed: number, phase: number): void {
-  let x = fig.baseX;
-  let y = fig.baseY + Math.sin(elapsed * 1.9 + phase) * 0.03; // idle bob
-  let rotY = 180;
-  let rotZ = Math.sin(elapsed * 1.4 + phase) * 2;             // idle sway
-  let waving = false;
+  const now = Date.now();
+  const set = fig.handle.def.set;
 
-  if (dance) {
-    const t = (Date.now() - dance.at) / 1000 / DANCE_DUR_SEC;
+  // a new dance event — try the real clip once
+  if (dance && dance.at > fig.clipUntil - CLIP_DANCE_SEC * 1000 && now - dance.at < 250) {
+    const clip = DANCE_CLIPS[set][dance.move];
+    if (clip && fig.handle.play(clip, 0.15)) {
+      fig.clipUntil = dance.at + CLIP_DANCE_SEC * 1000;
+    }
+  }
+  // clip finished — settle back to idle
+  if (fig.clipUntil > 0 && now > fig.clipUntil) {
+    fig.clipUntil = 0;
+    fig.handle.play(IDLE_CLIP[set], 0.3);
+  }
+
+  let x = fig.baseX;
+  let y = fig.baseY;
+  let rotY = 0;
+  let rotZ = Math.sin(elapsed * 1.4 + phase) * 1.5; // soft idle sway on the root
+
+  // procedural fallback for moves this character has no clip for
+  const clipActive = fig.clipUntil > 0;
+  if (dance && !clipActive) {
+    const t = (now - dance.at) / 1000 / DANCE_DUR_SEC;
     if (t >= 0 && t <= 1) {
       switch (dance.move) {
         case 'bounce':
           y = fig.baseY + Math.abs(Math.sin(t * Math.PI * 3)) * 0.26;
           break;
         case 'spin':
-          rotY = 180 + 360 * (1 - Math.pow(1 - t, 3));
+          rotY = 360 * (1 - Math.pow(1 - t, 3));
           y = fig.baseY + Math.sin(t * Math.PI) * 0.1;
           break;
         case 'wave':
           rotZ = Math.sin(t * Math.PI * 4) * 12;
-          y = fig.baseY + Math.sin(t * Math.PI * 2) * 0.05;
-          waving = true;
           break;
         case 'shimmy':
           rotZ = Math.sin(t * Math.PI * 6) * 9;
@@ -1041,90 +1198,8 @@ function animateDancer(fig: DancerFig, dance: DanceState, elapsed: number, phase
     }
   }
 
-  fig.root.setLocalPosition(x, y, fig.baseZ);
-  fig.root.setLocalEulerAngles(0, rotY, rotZ);
-  if (fig.hand) fig.hand.enabled = waving;
-}
-
-// Human silhouettes seen from the back seat. The rider's glyph colour lives in
-// the clothing; skin and hair stay neutral so they read as people, not tokens.
-function createOccupant(
-  parent: pc.Entity,
-  name: string,
-  pos: [number, number, number],
-  colorHex: string,
-  gestures: pc.Entity[],
-  variant: 'man' | 'woman',
-  pose: 'seated' | 'standing' = 'seated',
-): pc.Entity {
-  const clothes = mat(colorToNumber(colorHex), 0.2);
-  const skin = mat(variant === 'man' ? 0xc08a5e : 0xd2a072, 0.08);
-  const hair = mat(variant === 'man' ? 0x161210 : 0x7a5230, 0.04); // man: black afro
-  const shades = mat(0x10131a, 0.3);
-
-  const figure = new pc.Entity(`${name}-body`);
-  figure.setLocalPosition(pos[0], pos[1], pos[2]);
-  parent.addChild(figure);
-
-  const torsoW = variant === 'man' ? 0.34 : 0.29;
-  if (pose === 'standing') {
-    // legs reach the ground (§8d meeting); origin stays at the torso centre
-    const trousers = mat(0x2a2c36, 0.04);
-    child(figure, 'box', [-0.08, -0.36, 0], [0.11, 0.42, 0.13], trousers);
-    child(figure, 'box', [0.08, -0.36, 0], [0.11, 0.42, 0.13], trousers);
-  }
-  // torso + rounded shoulders + slim upper arms
-  child(figure, 'box', [0, 0.02, 0], [torsoW, 0.26, 0.15], clothes);
-  child(figure, 'sphere', [-torsoW / 2 + 0.01, 0.13, 0], [0.09, 0.08, 0.09], clothes);
-  child(figure, 'sphere', [torsoW / 2 - 0.01, 0.13, 0], [0.09, 0.08, 0.09], clothes);
-  child(figure, 'box', [-(torsoW / 2 + 0.02), 0.0, 0], [0.06, 0.18, 0.08], clothes).setLocalEulerAngles(0, 0, 7);
-  child(figure, 'box', [torsoW / 2 + 0.02, 0.0, 0], [0.06, 0.18, 0.08], clothes).setLocalEulerAngles(0, 0, -7);
-  // neck + head
-  child(figure, 'cylinder', [0, 0.16, 0], [0.05, 0.08, 0.05], skin);
-  const headY = 0.28;
-  const head = child(figure, 'sphere', [0, headY, 0], variant === 'man' ? [0.15, 0.165, 0.15] : [0.14, 0.155, 0.14], skin);
-  head.name = `${name}-head`;
-  // ears peeking out (visible from behind, sells "head" instantly)
-  child(figure, 'sphere', [-0.072, headY, 0], [0.032, 0.042, 0.03], skin);
-  child(figure, 'sphere', [0.072, headY, 0], [0.032, 0.042, 0.03], skin);
-
-  if (variant === 'man') {
-    // a proper afro: big rounded crown, kept clear of the face
-    child(figure, 'sphere', [0, headY + 0.105, 0.022], [0.205, 0.165, 0.19], hair);
-    child(figure, 'sphere', [-0.082, headY + 0.045, 0.02], [0.105, 0.105, 0.115], hair);
-    child(figure, 'sphere', [0.082, headY + 0.045, 0.02], [0.105, 0.105, 0.115], hair);
-    child(figure, 'sphere', [0, headY + 0.03, 0.065], [0.15, 0.13, 0.06], hair);
-  } else {
-    // long hair: rounded cap + a smooth curtain falling to the shoulder line
-    child(figure, 'sphere', [0, headY + 0.035, 0.015], [0.15, 0.11, 0.145], hair);
-    child(figure, 'sphere', [0, headY - 0.13, 0.062], [0.165, 0.27, 0.07], hair);
-  }
-
-  // sunglasses: dark band across the face with a thin bridge highlight
-  const faceR = variant === 'man' ? 0.072 : 0.067;
-  child(figure, 'box', [0, headY + 0.015, -(faceR - 0.005)], [0.125, 0.038, 0.025], shades);
-  child(figure, 'box', [0, headY + 0.015, -(faceR + 0.008)], [0.04, 0.012, 0.01], shades);
-
-  // raised waving hand + forearm (toggled by gestures)
-  const hand = new pc.Entity(`${name}-gesture`);
-  figure.addChild(hand);
-  const side = name === 'driver' ? 1 : -1; // wave on the inner side, toward the peer
-  const armPart = primitive('forearm', 'cylinder', [side * (torsoW / 2 + 0.06), 0.22, 0], [0.045, 0.22, 0.045], clothes);
-  armPart.setLocalEulerAngles(0, 0, side * -18);
-  hand.addChild(armPart);
-  const palm = primitive('palm', 'sphere', [side * (torsoW / 2 + 0.095), 0.35, 0], [0.055, 0.06, 0.045], skin);
-  hand.addChild(palm);
-  hand.enabled = false;
-
-  gestures.push(figure, head, hand);
-  return figure;
-}
-
-function updateCapsuleGestures(gestures: pc.Entity[], driverGesture?: GestureKind | null, passengerGesture?: GestureKind | null) {
-  const driverHand = gestures[2];
-  const passengerHand = gestures[5];
-  if (driverHand) driverHand.enabled = !!driverGesture;
-  if (passengerHand) passengerHand.enabled = !!passengerGesture;
+  fig.handle.root.setLocalPosition(x, y, fig.baseZ);
+  fig.handle.root.setLocalEulerAngles(0, rotY, clipActive ? 0 : rotZ);
 }
 
 // ---------------------------------------------------------------- fireworks & bursts

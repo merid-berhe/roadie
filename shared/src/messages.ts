@@ -13,8 +13,9 @@ export const DANCE_MOVES: DanceMove[] = ['bounce', 'spin', 'wave', 'shimmy'];
 
 export type Rider = {
   role: Role;
-  glyph: string;
+  glyph: string;     // legacy identity symbol — retired from UI in v5.4
   color: string;
+  character?: string; // v5.4 — roster character id, dealt per ride by the room
   connected: boolean;
 };
 

@@ -2,6 +2,7 @@ import type * as Party from 'partykit/server';
 import type { ClientMsg, DanceMove, Destination, Phase, Rider, Role, RoomMsg } from '@roadie/shared';
 import {
   buildPrompt,
+  CHARACTER_IDS,
   pickDestinationForRoom,
   PROMPT_MAX_CHARS,
   PROMPT_MAX_TRIES,
@@ -15,6 +16,7 @@ type Participant = {
   role: Role;
   glyph: string;
   color: string;
+  character: string; // v5.4 — dealt at join, distinct per rider
 };
 
 const DANCE_SYNC_WINDOW_MS = 1500;
@@ -104,7 +106,11 @@ export default class RideRoom implements Party.Server {
         sender.send(JSON.stringify({ t: 'roomFull' } satisfies RoomMsg)); return;
       }
       const role: Role = this.roleTaken('driver') ? 'passenger' : 'driver';
-      this.participants.set(sender.id, { userId: msg.userId, role, glyph: msg.glyph, color: msg.color });
+      // deal a character nobody in the room is already wearing (v5.4)
+      const taken = new Set([...this.participants.values()].map((p) => p.character));
+      const free = CHARACTER_IDS.filter((id) => !taken.has(id));
+      const character = free[Math.floor(Math.random() * free.length)] ?? CHARACTER_IDS[0];
+      this.participants.set(sender.id, { userId: msg.userId, role, glyph: msg.glyph, color: msg.color, character });
     }
     // Re-send rideStart to a reconnecting client if ride is already underway (§9)
     if (this.phase === 'riding' && this.audioUrl && this.rideStartAt) {
@@ -424,7 +430,7 @@ export default class RideRoom implements Party.Server {
 
   private publicRiders(): Rider[] {
     return [...this.participants.values()]
-      .map((p) => ({ role: p.role, glyph: p.glyph, color: p.color, connected: true }))
+      .map((p) => ({ role: p.role, glyph: p.glyph, color: p.color, character: p.character, connected: true }))
       .sort((a) => (a.role === 'driver' ? -1 : 1));
   }
 

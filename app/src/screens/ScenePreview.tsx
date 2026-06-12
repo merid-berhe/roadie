@@ -26,8 +26,11 @@ const initialGesture = (GESTURE_OPTIONS as (string | null)[]).includes(initialPa
   ? (initialParams.get('gesture') as GestureKind)
   : null;
 // §8d meeting preview: ?meeting=1&dance=bounce (both figures loop the move)
+// v5.4 character preview: ?dc=moss&pc=vex
 const initialMeeting = initialParams.has('meeting');
 const initialDanceMove = initialParams.get('dance');
+const initialDriverChar = initialParams.get('dc') ?? 'moss';
+const initialPassengerChar = initialParams.get('pc') ?? 'juno';
 
 export default function ScenePreview() {
   const [road, setRoad]               = useState<RoadId>(initialRoad);
@@ -108,6 +111,8 @@ export default function ScenePreview() {
               driverGestureKind={driverGesture}
               passengerGestureKind={passengerGesture}
               firework={firework}
+              driverCharacter={initialDriverChar}
+              passengerCharacter={initialPassengerChar}
               mode={initialMeeting ? 'meeting' : 'ride'}
               driverDance={previewDance}
               passengerDance={previewDance}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import { CharacterFace, characterName } from '../components/CharacterFace';
 
 type RadioSong = {
   id: string;
@@ -147,9 +148,14 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
                     {song.recipe?.vocals ? ' 🎤' : ''}
                   </p>
                   <p className="truncate text-xs text-white/40">
-                    {song.contributor_glyphs?.join(' + ') ?? '▲ + ●'} · {place} ·{' '}
+                    {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ') || 'two riders'} · {place} ·{' '}
                     {new Date(song.created_at).toLocaleDateString()}
                   </p>
+                </div>
+                <div className="flex flex-shrink-0 -space-x-2">
+                  {(song.contributor_glyphs ?? []).slice(0, 2).map((c, i) => (
+                    <CharacterFace key={i} id={c} size={26} />
+                  ))}
                 </div>
               </button>
             );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { inviteLink } from '../lib/roomCode';
+import { CharacterFace, characterName } from '../components/CharacterFace';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
@@ -11,6 +12,7 @@ export default function Lobby({ roomCode }: { roomCode: string }) {
 
   const yourRider = riders.find((r) => r.role === you);
   const peerRider = riders.find((r) => r.role !== you);
+  const yourName = characterName(yourRider?.character);
 
   async function copyInvite() {
     try {
@@ -25,15 +27,26 @@ export default function Lobby({ roomCode }: { roomCode: string }) {
       <p className="text-sm uppercase tracking-widest text-white/40">the lobby</p>
 
       <div className="flex items-center gap-10">
-        <GlyphBadge
-          glyph={yourRider?.glyph ?? identity?.glyph}
-          color={yourRider?.color ?? identity?.color}
-          label={you ? `you · ${you}` : 'you'}
-        />
+        <div className="flex flex-col items-center gap-2">
+          <CharacterFace id={yourRider?.character} color={yourRider?.color ?? identity?.color} size={72} />
+          <p className="text-xs text-white/50">
+            {yourName ? `you're ${yourName}` : 'you'}{you ? ` · ${you}` : ''}
+          </p>
+        </div>
         <span className="text-2xl text-white/20">+</span>
-        {peerRider
-          ? <GlyphBadge glyph={peerRider.glyph} color={peerRider.color} label={`co-rider · ${peerRider.role}`} />
-          : <GlyphBadge label="waiting…" />}
+        {peerRider ? (
+          <div className="flex flex-col items-center gap-2">
+            <CharacterFace id={peerRider.character} color={peerRider.color} size={72} />
+            <p className="text-xs text-white/50">
+              {characterName(peerRider.character) ?? 'co-rider'} · {peerRider.role}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-[72px] w-[72px] rounded-full border-2 border-dashed border-white/15" />
+            <p className="text-xs text-white/50">waiting…</p>
+          </div>
+        )}
       </div>
 
       <div className="flex w-full max-w-xs flex-col items-center gap-3">
@@ -48,16 +61,5 @@ export default function Lobby({ roomCode }: { roomCode: string }) {
 
       <p className="text-xs text-white/20">room {roomCode}</p>
     </main>
-  );
-}
-
-function GlyphBadge({ glyph, color, label }: { glyph?: string; color?: string; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="text-6xl leading-none" style={{ color: glyph ? color : '#374151' }}>
-        {glyph ?? '○'}
-      </div>
-      <p className="text-xs text-white/50">{label}</p>
-    </div>
   );
 }
