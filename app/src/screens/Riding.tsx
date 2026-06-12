@@ -25,11 +25,16 @@ export default function Riding() {
 
   const [positionSec, setPositionSec] = useState(0);
 
-  // rAF position loop (clock-synced)
+  // rAF position loop — the AUDIO is the truth (drift-corrected against the
+  // server, identical on both clients); wall-clock+offset is only the fallback
+  // before playback starts (v5.5: progress bars were diverging across clients)
   useEffect(() => {
     let raf: number;
     const tick = () => {
-      if (rideStartAt) {
+      const audioPos = getActualPositionSec();
+      if (audioPos != null) {
+        setPositionSec(Math.max(0, audioPos));
+      } else if (rideStartAt) {
         setPositionSec(Math.max(0, (Date.now() + clockOffset - rideStartAt) / 1000));
       }
       raf = requestAnimationFrame(tick);

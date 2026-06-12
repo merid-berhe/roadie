@@ -57,7 +57,7 @@ export default function ScenePreview() {
     if (!initialMeeting || !initialDanceMove) return;
     const fire = () => setPreviewDance({ move: initialDanceMove as DanceMove, at: Date.now() });
     fire();
-    const iv = setInterval(fire, 2500);
+    const iv = setInterval(fire, 4000); // > CLIP_DANCE_SEC so idle recovery is observable
     return () => clearInterval(iv);
   }, []);
   const [cameraMode, setCameraMode]   = useState<CameraMode>('interior');

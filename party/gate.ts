@@ -37,11 +37,12 @@ Rules:
 - "music" equals "display" EXCEPT: replace any artist, band, or song names with concise style descriptors of that artist's sound (e.g. "like Bill Withers" → "like early-70s warm soul with mellow electric piano"). If there are no such names, "music" is identical to "display".
 - Never add content the player didn't imply. Keep both under 160 characters.`;
 
-const FUSE_SYSTEM_PROMPT = `You are the record producer for a cozy two-player road-trip game. Two players each wrote a short request for ONE shared song. Write a single music-generation brief that fuses everything into one coherent, genuinely listenable track.
+const FUSE_SYSTEM_PROMPT = `You are the record producer for a two-player music game. Two players each wrote a short request for ONE shared song. Write a single music-generation brief that fuses their requests into one coherent, genuinely listenable track.
 Rules:
-- Pick ONE unifying genre or fusion direction. When the requests clash, find the tasteful overlap — do not list everything side by side.
-- Be concrete: tempo feel, 2–4 instruments, groove, mood. Honor a recognizable element of EACH player's request.
-- The result must read like a track a person would enjoy on a drive — coherent and musical above all.
+- THE PLAYERS' REQUESTS ARE THE DIRECTION. Be specific and faithful to them: if they ask for Ethiopian jazz, the brief is unmistakably Ethiopian jazz (pentatonic horn lines, vintage organ, swinging drums) — never dilute a specific request into generic mood music.
+- Pick ONE unifying fusion when the two requests differ. Honor a recognizable element of EACH.
+- Be concrete: genre, tempo feel, 2–4 instruments, groove, mood.
+- Any setting/mood context provided is light seasoning only — a word or two at most, never the lead.
 - No artist, band, or song names. Plain descriptive English. Maximum 220 characters.
 - Output ONLY the brief text, no quotes, no preamble.`;
 
@@ -95,11 +96,12 @@ export class FalLlmGate implements PromptGate {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {
+      // v5.5: mood words deliberately excluded — they were washing user intent
+      // into generic output. The players' texts lead; setting is seasoning.
       const parts = [
         input.driverText ? `Player A asked for: ${input.driverText}` : null,
         input.passengerText ? `Player B asked for: ${input.passengerText}` : null,
-        `Shared moods: ${input.moods[0]} + ${input.moods[1]}.`,
-        input.destinationFlavor ? `Setting: ${input.destinationFlavor}.` : null,
+        input.destinationFlavor ? `Setting (seasoning only): ${input.destinationFlavor}.` : null,
         input.vocals ? 'The track will have vocals.' : 'The track is instrumental.',
       ].filter(Boolean).join('\n');
 

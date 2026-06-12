@@ -56,6 +56,7 @@ export function buildPrompt(
   } = {},
 ): { prompt: string; bpm: number; durationSec: number; vocals: boolean; recipe: Recipe } {
   const vocals = opts.vocals ?? false;
+  const hasText = Boolean(opts.driverMusicText || opts.passengerMusicText);
   const direction = opts.fusedBrief
     ? opts.fusedBrief
     : [opts.driverMusicText, opts.passengerMusicText].filter(Boolean).join('; ');
@@ -63,14 +64,19 @@ export function buildPrompt(
     ? `inspired by ${destination.name}, ${destination.country} — ${destination.promptFlavor}`
     : '';
 
-  const prompt = [
-    direction,
-    // the brief already folds the moods in; keep them only on the fallback path
-    opts.fusedBrief ? '' : `${seedDriver} + ${seedPassenger} mood`,
-    place,
-    'road-trip feel',
-    vocals ? 'with vocals' : 'instrumental, no vocals',
-  ]
+  // v5.5: when the riders typed anything, their words ARE the direction — mood
+  // words and road-trip framing stay out of the music prompt (they were
+  // washing user intent into generic "golden hour" output). Moods still drive
+  // the visuals, and they carry the prompt alone when nobody typed.
+  const prompt = (hasText
+    ? [direction, place, vocals ? 'with vocals' : 'instrumental, no vocals']
+    : [
+        `${seedDriver} + ${seedPassenger} mood`,
+        place,
+        'road-trip feel',
+        vocals ? 'with vocals' : 'instrumental, no vocals',
+      ]
+  )
     .filter(Boolean)
     .join(', ');
 

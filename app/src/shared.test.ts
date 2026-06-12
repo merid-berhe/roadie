@@ -30,7 +30,7 @@ describe('destinations', () => {
 describe('buildPrompt (§5 v5.0 — prompt-first)', () => {
   const destination = DESTINATIONS[0];
 
-  it('weaves both riders’ music texts, moods, and destination into the prompt', () => {
+  it('user texts lead the prompt — mood words stay OUT when anyone typed (v5.5)', () => {
     const result = buildPrompt('midnight', 'wide-open', destination, {
       driverMusicText: 'early-70s warm soul with mellow electric piano',
       passengerMusicText: 'dusty desert blues',
@@ -40,7 +40,8 @@ describe('buildPrompt (§5 v5.0 — prompt-first)', () => {
 
     expect(result.prompt).toContain('early-70s warm soul');
     expect(result.prompt).toContain('dusty desert blues');
-    expect(result.prompt).toContain('midnight + wide-open mood');
+    expect(result.prompt).not.toContain('midnight'); // moods drive visuals only
+    expect(result.prompt).not.toContain('road-trip'); // no generic washing
     expect(result.prompt).toContain(destination.name);
     expect(result.prompt).toContain('no vocals'); // instrumental by default
     // the recipe records the DISPLAY texts (what the riders saw), not the music-side swaps
@@ -48,9 +49,10 @@ describe('buildPrompt (§5 v5.0 — prompt-first)', () => {
     expect(result.recipe.vocals).toBe(false);
   });
 
-  it('still builds a valid prompt when nobody typed anything', () => {
+  it('moods carry the prompt when nobody typed anything', () => {
     const result = buildPrompt('rainy', 'dreaming', destination, {});
     expect(result.prompt).toContain('rainy + dreaming mood');
+    expect(result.prompt).toContain('road-trip feel');
     expect(result.prompt).toContain('instrumental');
     expect(result.recipe.driver.text).toBeUndefined();
   });

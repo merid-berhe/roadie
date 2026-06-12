@@ -40,6 +40,8 @@ const CELL = 6;           // terrain row length
 const ROWS = FAR / CELL;  // 39
 const WORLD_SPEED = 7;
 const ROAD_TOP = -0.57;   // y of the road surface
+const ROAD_HALF = 2.7;    // v5.5: two real lanes — the car occupies one comfortably
+const CAR_X = 1.35;       // centred in the right lane
 const CAR_Z = -1.0;       // the hero car sits here, facing +z
 const BAND = FAR / 2;     // props live in z ∈ [−BAND, +BAND] around the car (the camera orbits)
 const TERRAIN_AHEAD = 220;
@@ -199,7 +201,7 @@ export default function PlayCanvasRideScene({
     // each player freely orbits the car by dragging (local-only — camera angle
     // is presentation, not room state); narrow viewports pull back
     let aspectK = 1;
-    let yaw = 0; // 0 = ahead of the car, looking back at the riders
+    let yaw = 0; // 0 = ahead of the car, looking back at the riders (orbit centres on CAR_X)
     let yawVel = 0;
     let dragging = false;
     let lastX = 0;
@@ -225,8 +227,8 @@ export default function PlayCanvasRideScene({
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
-    camera.setPosition(0, 1.7, CAR_Z + 5.8);
-    camera.lookAt(0, 0.45, CAR_Z);
+    camera.setPosition(CAR_X, 1.7, CAR_Z + 5.8);
+    camera.lookAt(CAR_X, 0.45, CAR_Z);
     app.root.addChild(camera);
 
     const sun = new pc.Entity('sun');
@@ -311,14 +313,14 @@ export default function PlayCanvasRideScene({
       }
       const sx = Math.sin(yaw);
       camera.setPosition(
-        sx * 3.8,
+        CAR_X + sx * 3.8,
         1.7 + sx * sx * 3.7 + (aspectK - 1) * 0.75,
         CAR_Z + Math.cos(yaw) * 5.8 * aspectK,
       );
-      camera.lookAt(0, 0.45, CAR_Z);
-      carRig.setLocalPosition(Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
+      camera.lookAt(CAR_X, 0.45, CAR_Z);
+      carRig.setLocalPosition(CAR_X + Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
       carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
-      carShadow?.setLocalPosition(0, ROAD_TOP + 0.006, CAR_Z);
+      carShadow?.setLocalPosition(CAR_X, ROAD_TOP + 0.006, CAR_Z);
 
       // §8d the Meeting: characters dance beside the parked car (real clips
       // when the character has one for the move, procedural wiggle otherwise)
@@ -328,7 +330,7 @@ export default function PlayCanvasRideScene({
         if (danceSyncedAtRef.current > lastDanceSyncSeen) {
           lastDanceSyncSeen = danceSyncedAtRef.current;
           spawnBurst(
-            app, fireworks, new pc.Vec3(0, 1.6, CAR_Z + 1.2),
+            app, fireworks, new pc.Vec3(CAR_X, 1.6, CAR_Z + 1.2),
             [colorToNumber(driverColorRef.current), colorToNumber(passengerColorRef.current), 0xffffff, 0xffd166],
             26, 1.4, 1.1, 0.07,
           );
@@ -507,7 +509,8 @@ function createBackdrop(app: pc.Application, theme: Theme, road: RoadId) {
 type HeightFn = (side: -1 | 1, x: number, row: number) => number;
 
 function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightFn {
-  const colEdges = [2.3, 3.2, 4.4, 6, 8, 10.5, 14, 18, 24, 32, 42, 56];
+  // v5.5: terrain starts past the wider two-lane road + shoulders
+  const colEdges = [3.9, 4.8, 6, 7.6, 9.6, 12.1, 15.6, 19.6, 25.6, 33.6, 43.6, 57.6];
   const rng = makeRng(road.length * 101 + 5);
 
   // per-vertex jitter grid, periodic in z (row ROWS == row 0)
@@ -518,7 +521,7 @@ function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightF
   for (let c = 0; c < colEdges.length; c++) jitter[ROWS][c] = jitter[0][c];
 
   const profile = (side: -1 | 1, x: number): { base: number; amp: number } => {
-    const d = Math.max(0, x - 2.3);
+    const d = Math.max(0, x - 3.9);
     if (road === 'desert') return { base: -0.62 + Math.max(0, d - 5) * 0.02, amp: Math.min(0.7, d * 0.05) };
     if (road === 'mountain') return { base: -0.62 + d * 0.14, amp: Math.min(1.4, 0.2 + d * 0.06) };
     if (road === 'city') return { base: -0.62, amp: 0 };
@@ -553,7 +556,7 @@ function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightF
           const y01 = heightAt(side, colEdges[c], r + 1);
           const y11 = heightAt(side, colEdges[c + 1], r + 1);
           let col = lerpColor(theme.ground, theme.groundAlt, colorRng());
-          if (road === 'coast' && side > 0 && colEdges[c] > 4.4) col = lerpColor(0xb08d5e, 0x96714a, colorRng()); // cliff face
+          if (road === 'coast' && side > 0 && colEdges[c] > 6.0) col = lerpColor(0xb08d5e, 0x96714a, colorRng()); // cliff face
           if (road === 'mountain' && Math.min(y00, y10) > 1.6) col = lerpColor(0x8b97a0, 0xa8b4bc, colorRng()); // rocky above treeline
           if (road === 'mountain' && Math.min(y00, y10) > 3.4) col = lerpColor(0xdfe8ee, 0xeff5f8, colorRng()); // snow
           const shade = 0.92 + colorRng() * 0.16;
@@ -578,7 +581,7 @@ function createTerrain(app: pc.Application, theme: Theme, road: RoadId): HeightF
       const z1 = span / 2 - ((i + 1) * span) / zSteps;
       const c0 = lerpColor(nearC, farC, Math.abs(z0) / (span / 2));
       const c1 = lerpColor(nearC, farC, Math.abs(z1) / (span / 2));
-      ob.quadColors([5.5, -2.6, z0], [150, -2.6, z0], [150, -2.6, z1], [5.5, -2.6, z1], c0, c0, c1, c1);
+      ob.quadColors([7.1, -2.6, z0], [150, -2.6, z0], [150, -2.6, z1], [7.1, -2.6, z1], c0, c0, c1, c1);
     }
     const ocean = ob.entity(app, 'ocean', litVCMat());
     app.root.addChild(ocean);
@@ -596,14 +599,16 @@ function createRoad(app: pc.Application, moving: MovingEntity[], theme: Theme) {
   const shoulderMat = mat(theme.shoulder, 0);
 
   // static: asphalt, edge lines, shoulders (uniform surfaces don't show motion);
-  // symmetric around the car so the orbiting camera never sees the road end
-  addBox(app, 'road', [0, -0.6, 0], [3.4, 0.06, 2 * TERRAIN_AHEAD + 20], roadMat);
-  addBox(app, 'edge-l', [-1.45, -0.565, 0], [0.09, 0.012, 2 * TERRAIN_AHEAD + 20], edgeMat);
-  addBox(app, 'edge-r', [1.45, -0.565, 0], [0.09, 0.012, 2 * TERRAIN_AHEAD + 20], edgeMat);
-  addBox(app, 'shoulder-l', [-2.15, -0.605, 0], [1.0, 0.045, 2 * TERRAIN_AHEAD + 20], shoulderMat);
-  addBox(app, 'shoulder-r', [2.15, -0.605, 0], [1.0, 0.045, 2 * TERRAIN_AHEAD + 20], shoulderMat);
+  // symmetric around the car so the orbiting camera never sees the road end.
+  // v5.5: a proper two-lane road — the car sits in the right lane (CAR_X).
+  addBox(app, 'road', [0, -0.6, 0], [ROAD_HALF * 2, 0.06, 2 * TERRAIN_AHEAD + 20], roadMat);
+  addBox(app, 'edge-l', [-(ROAD_HALF - 0.1), -0.565, 0], [0.09, 0.012, 2 * TERRAIN_AHEAD + 20], edgeMat);
+  addBox(app, 'edge-r', [ROAD_HALF - 0.1, -0.565, 0], [0.09, 0.012, 2 * TERRAIN_AHEAD + 20], edgeMat);
+  // shoulders run road edge → terrain start (3.9) with no see-through gap
+  addBox(app, 'shoulder-l', [-(ROAD_HALF + 0.65), -0.605, 0], [1.3, 0.045, 2 * TERRAIN_AHEAD + 20], shoulderMat);
+  addBox(app, 'shoulder-r', [ROAD_HALF + 0.65, -0.605, 0], [1.3, 0.045, 2 * TERRAIN_AHEAD + 20], shoulderMat);
 
-  // scrolling: centre dashes
+  // scrolling: lane-divider dashes down the middle
   const dashCount = 30;
   for (let i = 0; i < dashCount; i++) {
     const e = addBox(app, `lane-${i}`, [0, -0.555, 0], [0.1, 0.012, 2.2], laneMat);
@@ -675,7 +680,7 @@ function buildDesert(rng: () => number, groupAt: GroupAt) {
     const pick = rng();
     if (pick < 0.4) {
       // saguaro
-      const x = side * (4 + rng() * 6);
+      const x = side * (7.2 + rng() * 6);
       const { g, reg } = groupAt(side, x, r);
       const h = 1.3 + rng() * 1.1;
       const m = rng() < 0.7 ? cactus : cactusDark;
@@ -692,7 +697,7 @@ function buildDesert(rng: () => number, groupAt: GroupAt) {
       reg();
     } else if (pick < 0.55) {
       // mesa
-      const x = side * (12 + rng() * 14);
+      const x = side * (13.6 + rng() * 14);
       const { g, reg } = groupAt(side, x, r);
       const w = 5 + rng() * 8;
       const h1 = 1.2 + rng() * 1.4;
@@ -702,7 +707,7 @@ function buildDesert(rng: () => number, groupAt: GroupAt) {
       reg();
     } else if (pick < 0.8) {
       // rocks
-      const x = side * (3.4 + rng() * 4);
+      const x = side * (5 + rng() * 4);
       const { g, reg } = groupAt(side, x, r);
       const s = 0.25 + rng() * 0.5;
       child(g, 'sphere', [0, s * 0.3, 0], [s * 1.5, s * 0.8, s * 1.2], rock);
@@ -710,7 +715,7 @@ function buildDesert(rng: () => number, groupAt: GroupAt) {
       reg();
     } else {
       // dry bush
-      const x = side * (3.2 + rng() * 5);
+      const x = side * (4.8 + rng() * 5);
       const { g, reg } = groupAt(side, x, r);
       const s = 0.3 + rng() * 0.3;
       child(g, 'sphere', [0, s * 0.5, 0], [s * 1.4, s, s * 1.3], bush);
@@ -721,7 +726,7 @@ function buildDesert(rng: () => number, groupAt: GroupAt) {
 
   // telephone poles — route 66's metronome (outside the camera's orbit)
   for (let r = 0; r < ROWS; r += 3) {
-    const { g, reg } = groupAt(-1, -4.1, r);
+    const { g, reg } = groupAt(-1, -5.7, r);
     child(g, 'cylinder', [0, 1.3, 0], [0.09, 2.6, 0.09], pole);
     child(g, 'box', [0, 2.32, 0], [0.95, 0.07, 0.07], pole);
     child(g, 'box', [0, 2.05, 0], [0.7, 0.06, 0.06], pole);
@@ -745,7 +750,7 @@ function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber
     const pick = rng();
     if (pick < 0.45) {
       // wind-swept monterey cypress on the hill side
-      const x = -(3.6 + rng() * 6);
+      const x = -(5.2 + rng() * 6);
       const { g, reg } = groupAt(-1, x, r);
       const h = 1.4 + rng() * 1.2;
       const sweep = 0.25 + rng() * 0.35; // leans toward the sea
@@ -756,14 +761,14 @@ function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber
       reg();
     } else if (pick < 0.7) {
       // cypress / shrub
-      const x = -(3.4 + rng() * 8);
+      const x = -(5 + rng() * 8);
       const { g, reg } = groupAt(-1, x, r);
       const h = 1.4 + rng() * 1.6;
       child(g, 'cone', [0, h / 2, 0], [0.5 + rng() * 0.3, h, 0.5 + rng() * 0.3], cypress, 7);
       reg();
     } else {
       // rocks near the cliff edge
-      const x = 3.6 + rng() * 1.2;
+      const x = 5.2 + rng() * 1.2;
       const { g, reg } = groupAt(1, x, r);
       const s = 0.2 + rng() * 0.3;
       child(g, 'sphere', [0, s * 0.3, 0], [s * 1.4, s * 0.8, s * 1.1], rock);
@@ -772,9 +777,9 @@ function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber
   }
 
   // guardrail on the ocean side: static rail + scrolling posts
-  addBox(app, 'rail', [2.62, -0.18, 0], [0.07, 0.1, 2 * TERRAIN_AHEAD + 20], rail);
+  addBox(app, 'rail', [3.05, -0.18, 0], [0.07, 0.1, 2 * TERRAIN_AHEAD + 20], rail);
   for (let r = 0; r < ROWS; r += 1) {
-    const { g, reg } = groupAt(1, 2.62, r);
+    const { g, reg } = groupAt(1, 3.05, r);
     child(g, 'box', [0, 0.22, 0], [0.1, 0.45, 0.1], post);
     reg();
   }
@@ -782,7 +787,7 @@ function buildCoast(app: pc.Application, moving: MovingEntity[], bobbers: Bobber
   // whitecaps drifting on the water
   for (let i = 0; i < 14; i++) {
     const e = addBox(app, `cap-${i}`, [0, 0, 0], [1.2 + rng() * 2.4, 0.04, 0.16], capMat);
-    moving.push({ entity: e, base: rng() * FAR, x: 8 + rng() * 36, y: -2.54 });
+    moving.push({ entity: e, base: rng() * FAR, x: 9.5 + rng() * 36, y: -2.54 });
   }
 
   // sailboats far out
@@ -815,7 +820,7 @@ function buildMountain(rng: () => number, groupAt: GroupAt) {
       // pine cluster
       const n = 1 + Math.floor(rng() * 3);
       for (let t = 0; t < n; t++) {
-        const x = side * (3.4 + rng() * 7);
+        const x = side * (5 + rng() * 7);
         const { g, reg } = groupAt(side, x, r);
         const h = 1.2 + rng() * 1.7;
         const m = rng() < 0.5 ? pineA : pineB;
@@ -828,20 +833,20 @@ function buildMountain(rng: () => number, groupAt: GroupAt) {
       }
     } else if (pick < 0.72) {
       // boulder
-      const x = side * (3.2 + rng() * 4);
+      const x = side * (4.8 + rng() * 4);
       const { g, reg } = groupAt(side, x, r);
       const s = 0.3 + rng() * 0.6;
       child(g, 'sphere', [0, s * 0.35, 0], [s * 1.5, s * 0.9, s * 1.2], rockM);
       reg();
     } else if (pick < 0.86) {
       // snow patch
-      const x = side * (4 + rng() * 8);
+      const x = side * (5.6 + rng() * 8);
       const { g, reg } = groupAt(side, x, r);
       child(g, 'box', [0, 0.03, 0], [1.4 + rng() * 1.6, 0.05, 1 + rng()], snow);
       reg();
     } else {
       // big near peak
-      const x = side * (16 + rng() * 12);
+      const x = side * (17.6 + rng() * 12);
       const { g, reg } = groupAt(side, x, r);
       const h = 7 + rng() * 7;
       child(g, 'cone', [0, h / 2, 0], [h * 0.9, h, h * 0.9], peakM, 5);
@@ -870,7 +875,7 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
     if (pick < 0.62) {
       // building with lit window bands; facades stay outside the camera's orbit
       const w = 1.6 + rng() * 1.8;
-      const x = side * Math.max(4.2 + rng() * 5, 4.2 + w / 2);
+      const x = side * Math.max(5.8 + rng() * 5, 5.8 + w / 2);
       const { g, reg } = groupAt(side, x, r);
       const h = 1.8 + rng() * 4.4;
       const dpt = 1.6 + rng() * 1.2;
@@ -888,7 +893,7 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
       reg();
     } else if (pick < 0.74) {
       // pagoda-ish tower
-      const x = side * (5.6 + rng() * 6);
+      const x = side * (7.2 + rng() * 6);
       const { g, reg } = groupAt(side, x, r);
       let y = 0;
       let w = 1.8 + rng() * 0.6;
@@ -905,7 +910,7 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
       reg();
     } else if (pick < 0.8 && r % 6 === 0) {
       // torii gate set back from the road
-      const x = side * (5.4 + rng() * 2);
+      const x = side * (7 + rng() * 2);
       const { g, reg } = groupAt(side, x, r);
       child(g, 'cylinder', [-0.8, 0.8, 0], [0.14, 1.6, 0.14], torii);
       child(g, 'cylinder', [0.8, 0.8, 0], [0.14, 1.6, 0.14], torii);
@@ -918,7 +923,7 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
   // street lamps, alternating sides
   for (let r = 0; r < ROWS; r += 2) {
     const side = r % 4 === 0 ? -1 : 1;
-    const { g, reg } = groupAt(side, side * 2.9, r);
+    const { g, reg } = groupAt(side, side * 3.6, r);
     child(g, 'cylinder', [0, 1.0, 0], [0.06, 2.0, 0.06], lampM);
     child(g, 'box', [-side * 0.3, 1.98, 0], [0.65, 0.05, 0.05], lampM);
     child(g, 'sphere', [-side * 0.58, 1.92, 0], [0.17, 0.14, 0.17], lampGlow);
@@ -928,8 +933,8 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
   }
 
   // sidewalks
-  addBox(app, 'walk-l', [-2.95, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
-  addBox(app, 'walk-r', [2.95, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
+  addBox(app, 'walk-l', [-3.55, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
+  addBox(app, 'walk-r', [3.55, -0.585, 0], [1.3, 0.08, 2 * TERRAIN_AHEAD + 20], mat(0x20222c, 0));
 }
 
 // ---------------------------------------------------------------- the hero car & characters
@@ -940,7 +945,8 @@ type RiderSpec = { color: string; character: CharacterDef | null };
 type CharacterHandle = {
   root: pc.Entity;
   def: CharacterDef;
-  play: (clipSuffix: string, fade?: number) => boolean;
+  /** returns the clip duration in seconds, or 0 when the clip doesn't exist */
+  play: (clipSuffix: string) => number;
   hasClip: (clipSuffix: string) => boolean;
 };
 
@@ -951,6 +957,8 @@ type DancerFig = {
   baseZ: number;
   /** when a clip-dance is running, procedural wiggle is suppressed until this */
   clipUntil: number;
+  /** last dance event consumed (each event triggers exactly once) */
+  lastDanceAt: number;
 };
 
 const CHARACTER_STAND_HEIGHT = 1.18; // next to the cartoon-proportioned car
@@ -961,35 +969,30 @@ function loadCharacter(app: pc.Application, spec: RiderSpec, name: string): Char
   const def = spec.character ?? { id: 'moss', name: 'Moss', file: 'man-longsleeves.glb', set: 'men' as const };
   const root = new pc.Entity(`character-${name}`);
   const tracks = new Map<string, pc.AnimTrack>();
-  const assigned = new Set<string>();
   let animEntity: pc.Entity | null = null;
   let pendingClip: string | null = null;
+  let currentClip: string | null = null;
 
   const findTrack = (suffix: string): pc.AnimTrack | undefined => {
     for (const [key, t] of tracks) if (key === suffix || key.endsWith(suffix)) return t;
     return undefined;
   };
 
-  const play = (clipSuffix: string, fade = 0.25): boolean => {
-    if (!animEntity) { pendingClip = clipSuffix; return true; } // queue until loaded
+  // deterministic clip switching: rebuild the anim component per change.
+  // (state-graph transitions on auto-created graphs proved unreliable.)
+  // Returns the clip duration so callers can let a move play to its natural
+  // END — cutting a clip mid-pose freezes any bone channels the next clip
+  // doesn't animate (the stuck-mid-Roll bug).
+  const play = (clipSuffix: string): number => {
+    if (!animEntity) { pendingClip = clipSuffix; return 1; } // queue until loaded
     const track = findTrack(clipSuffix);
-    if (!track) return false;
-    try {
-      if (!assigned.has(clipSuffix)) {
-        animEntity.anim?.assignAnimation(clipSuffix, track);
-        assigned.add(clipSuffix);
-      }
-      const layer = animEntity.anim?.baseLayer;
-      if (layer && layer.activeState !== clipSuffix) layer.transition(clipSuffix, fade);
-    } catch {
-      // hard fallback: rebuild the component with just this clip
-      animEntity.removeComponent('anim');
-      animEntity.addComponent('anim', { activate: true });
-      animEntity.anim?.assignAnimation(clipSuffix, track);
-      assigned.clear();
-      assigned.add(clipSuffix);
-    }
-    return true;
+    if (!track) return 0;
+    if (currentClip === clipSuffix) return track.duration ?? 1;
+    currentClip = clipSuffix;
+    try { animEntity.removeComponent('anim'); } catch { /* not present on first call */ }
+    animEntity.addComponent('anim', { activate: true });
+    animEntity.anim?.assignAnimation(clipSuffix, track);
+    return track.duration ?? 1;
   };
 
   const asset = new pc.Asset(`char-${def.id}`, 'container', { url: `/assets/characters/roster/${def.file}` });
@@ -1047,9 +1050,8 @@ function loadCharacter(app: pc.Application, spec: RiderSpec, name: string): Char
       const suffix = raw.split('|').pop()!.replace(/^Man_/, '');
       tracks.set(suffix, track);
     }
-    model.addComponent('anim', { activate: true });
-    animEntity = model;
-    if (pendingClip) { const c = pendingClip; pendingClip = null; play(c, 0); }
+    animEntity = model; // play() adds the anim component per clip
+    if (pendingClip) { const c = pendingClip; pendingClip = null; play(c); }
   });
   asset.on('error', (err: string) => console.error(`character ${def.id} failed:`, err));
   app.assets.add(asset);
@@ -1065,7 +1067,7 @@ function createCar(
   mode: 'ride' | 'meeting',
 ): { rig: pc.Entity; figures: { driver: DancerFig; passenger: DancerFig } | null } {
   const rig = new pc.Entity('car-rig');
-  rig.setLocalPosition(0, 0, CAR_Z);
+  rig.setLocalPosition(CAR_X, 0, CAR_Z);
   app.root.addChild(rig);
 
   const dHandle = loadCharacter(app, driver, 'driver');
@@ -1080,20 +1082,20 @@ function createCar(
       const hasSit = RIDE_CLIP[handle.def.set] === 'Sitting';
       handle.root.setLocalPosition(x, hasSit ? RIDE_SEAT_Y : RIDE_SEAT_Y_STANDING, 0.14);
       rig.addChild(handle.root);
-      handle.play(RIDE_CLIP[handle.def.set], 0);
+      handle.play(RIDE_CLIP[handle.def.set]);
     }
   } else {
     // §8d the Meeting: both stand beside the parked car, facing the camera
     const standY = ROAD_TOP;
-    dHandle.root.setLocalPosition(1.5, standY, CAR_Z + 0.9);
-    pHandle.root.setLocalPosition(-1.5, standY, CAR_Z + 0.9);
+    dHandle.root.setLocalPosition(CAR_X + 1.5, standY, CAR_Z + 0.9);
+    pHandle.root.setLocalPosition(CAR_X - 1.5, standY, CAR_Z + 0.9);
     app.root.addChild(dHandle.root);
     app.root.addChild(pHandle.root);
-    dHandle.play(IDLE_CLIP[dHandle.def.set], 0);
-    pHandle.play(IDLE_CLIP[pHandle.def.set], 0);
+    dHandle.play(IDLE_CLIP[dHandle.def.set]);
+    pHandle.play(IDLE_CLIP[pHandle.def.set]);
     figures = {
-      driver: { handle: dHandle, baseX: 1.5, baseY: standY, baseZ: CAR_Z + 0.9, clipUntil: 0 },
-      passenger: { handle: pHandle, baseX: -1.5, baseY: standY, baseZ: CAR_Z + 0.9, clipUntil: 0 },
+      driver: { handle: dHandle, baseX: CAR_X + 1.5, baseY: standY, baseZ: CAR_Z + 0.9, clipUntil: 0, lastDanceAt: 0 },
+      passenger: { handle: pHandle, baseX: CAR_X - 1.5, baseY: standY, baseZ: CAR_Z + 0.9, clipUntil: 0, lastDanceAt: 0 },
     };
   }
 
@@ -1106,7 +1108,7 @@ function createCar(
   shadowM.blendType = pc.BLEND_NORMAL;
   shadowM.depthWrite = false;
   shadowM.update();
-  const shadow = primitive('car-shadow', 'sphere', [0, ROAD_TOP + 0.006, CAR_Z], [1.9, 0.01, 3.5], shadowM);
+  const shadow = primitive('car-shadow', 'sphere', [CAR_X, ROAD_TOP + 0.006, CAR_Z], [1.9, 0.01, 3.5], shadowM);
   app.root.addChild(shadow);
 
   const asset = new pc.Asset('cicada_flat', 'container', { url: '/assets/cars/cicada_flat.glb' });
@@ -1150,23 +1152,25 @@ function createCar(
 // §8d — dance: play the character's real clip for the move when it has one,
 // fall back to a procedural wiggle otherwise. Idle keeps a soft root sway.
 const DANCE_DUR_SEC = 1.6;
-const CLIP_DANCE_SEC = 2.3;
 
 function animateDancer(fig: DancerFig, dance: DanceState, elapsed: number, phase: number): void {
   const now = Date.now();
   const set = fig.handle.def.set;
 
-  // a new dance event — try the real clip once
-  if (dance && dance.at > fig.clipUntil - CLIP_DANCE_SEC * 1000 && now - dance.at < 250) {
+  // a new dance event — consume it exactly once, try the real clip. The move
+  // runs for ONE full clip cycle (never cut mid-pose — see play()).
+  if (dance && dance.at !== fig.lastDanceAt) {
+    fig.lastDanceAt = dance.at;
     const clip = DANCE_CLIPS[set][dance.move];
-    if (clip && fig.handle.play(clip, 0.15)) {
-      fig.clipUntil = dance.at + CLIP_DANCE_SEC * 1000;
+    if (clip) {
+      const dur = fig.handle.play(clip);
+      if (dur > 0) fig.clipUntil = now + Math.min(Math.max(dur, 0.8), 4) * 1000;
     }
   }
-  // clip finished — settle back to idle
+  // clip finished — settle back to idle (hard cut, always lands)
   if (fig.clipUntil > 0 && now > fig.clipUntil) {
     fig.clipUntil = 0;
-    fig.handle.play(IDLE_CLIP[set], 0.3);
+    fig.handle.play(IDLE_CLIP[set]);
   }
 
   let x = fig.baseX;
@@ -1206,7 +1210,7 @@ function animateDancer(fig: DancerFig, dance: DanceState, elapsed: number, phase
 
 function spawnFirework(app: pc.Application, particles: { entity: pc.Entity; vel: pc.Vec3; life: number }[], synced: boolean, driverColor: number, passengerColor: number) {
   const colors = synced ? [driverColor, passengerColor, 0xffffff, 0xffd166] : [0xffffff, 0xd6d6d6];
-  spawnBurst(app, particles, new pc.Vec3(0, 4.5, -26), colors, synced ? 64 : 22, synced ? 3.2 : 1.6, synced ? 1.6 : 1.0, 0.12);
+  spawnBurst(app, particles, new pc.Vec3(CAR_X, 4.5, -26), colors, synced ? 64 : 22, synced ? 3.2 : 1.6, synced ? 1.6 : 1.0, 0.12);
 }
 
 function spawnBurst(
