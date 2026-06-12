@@ -201,20 +201,43 @@ export default class RideRoom implements Party.Server {
     if (!seedDriver || !seedPassenger) return;
 
     const vocals = this.vocalsVotes.get('driver') === true && this.vocalsVotes.get('passenger') === true;
-    this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, {
+    const opts = {
       driverMusicText: this.prompts.get('driver')?.music,
       passengerMusicText: this.prompts.get('passenger')?.music,
       driverDisplayText: this.prompts.get('driver')?.display,
       passengerDisplayText: this.prompts.get('passenger')?.display,
       vocals,
-    });
+    };
+    // provisional input (raw join) so the Meeting label has the recipe immediately;
+    // the producer pass refines it below before the music call
+    this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, opts);
     this.phase = 'generating';
     this.broadcastState();
 
     // Fire async — room continues handling messages while this runs (§15 happy path)
-    this.runGeneration(this.generationInput).catch((err: unknown) =>
-      console.error('[room] runGeneration unexpected error:', err),
-    );
+    (async () => {
+      // §5a producer pass: whenever any free text exists, fuse everything into
+      // ONE coherent brief — the alignment layer ("every song at minimum decent")
+      if (opts.driverMusicText || opts.passengerMusicText) {
+        try {
+          const brief = await this.gate.fuse({
+            driverText: opts.driverMusicText,
+            passengerText: opts.passengerMusicText,
+            moods: [seedDriver, seedPassenger],
+            destinationFlavor: this.destination.promptFlavor,
+            vocals,
+          });
+          if (brief && this.phase === 'generating') {
+            this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, { ...opts, fusedBrief: brief });
+            console.log(`[room] producer_brief="${brief.slice(0, 100)}…"`);
+            this.broadcastState(); // recipe.brief shows up on the Meeting label
+          }
+        } catch (err) {
+          console.error('[room] fuse_failed (falling back to raw join):', err);
+        }
+      }
+      await this.runGeneration(this.generationInput!);
+    })().catch((err: unknown) => console.error('[room] runGeneration unexpected error:', err));
   }
 
   private async runGeneration(input: MusicGeneratorInput & { vocals?: boolean }): Promise<void> {

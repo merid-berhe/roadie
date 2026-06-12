@@ -34,6 +34,7 @@ export type Recipe = {
   driver: { seed: string; text?: string };
   passenger: { seed: string; text?: string };
   vocals: boolean;
+  brief?: string; // §5a producer pass — the fused, coherence-enforced direction
 };
 
 /** Server-side, deterministic — §5. durationSec is 120 (2-min ride, decision 2026-06-05).
@@ -48,17 +49,23 @@ export function buildPrompt(
     driverDisplayText?: string;
     passengerDisplayText?: string;
     vocals?: boolean;
+    /** §5a producer pass — when present, replaces the raw text join as the
+     * musical direction (the coherence/alignment layer). */
+    fusedBrief?: string;
   } = {},
 ): { prompt: string; bpm: number; durationSec: number; vocals: boolean; recipe: Recipe } {
   const vocals = opts.vocals ?? false;
-  const texts = [opts.driverMusicText, opts.passengerMusicText].filter(Boolean).join('; ');
+  const direction = opts.fusedBrief
+    ? opts.fusedBrief
+    : [opts.driverMusicText, opts.passengerMusicText].filter(Boolean).join('; ');
   const place = destination
     ? `inspired by ${destination.name}, ${destination.country} — ${destination.promptFlavor}`
     : '';
 
   const prompt = [
-    texts,
-    `${seedDriver} + ${seedPassenger} mood`,
+    direction,
+    // the brief already folds the moods in; keep them only on the fallback path
+    opts.fusedBrief ? '' : `${seedDriver} + ${seedPassenger} mood`,
     place,
     'road-trip feel',
     vocals ? 'with vocals' : 'instrumental, no vocals',
@@ -75,6 +82,7 @@ export function buildPrompt(
       driver: { seed: seedDriver, ...(opts.driverDisplayText ? { text: opts.driverDisplayText } : {}) },
       passenger: { seed: seedPassenger, ...(opts.passengerDisplayText ? { text: opts.passengerDisplayText } : {}) },
       vocals,
+      ...(opts.fusedBrief ? { brief: opts.fusedBrief } : {}),
     },
   };
 }

@@ -62,4 +62,18 @@ describe('buildPrompt (§5 v5.0 — prompt-first)', () => {
     expect(result.prompt).not.toContain('no vocals');
     expect(result.recipe.vocals).toBe(true);
   });
+
+  it('a fused producer brief replaces the raw text join (§5a alignment)', () => {
+    const result = buildPrompt('midnight', 'wide-open', destination, {
+      driverMusicText: 'psychedelic guitar rock',
+      passengerMusicText: 'afrobeat percussion',
+      driverDisplayText: 'like jimi hendrix',
+      passengerDisplayText: 'afro beats',
+      fusedBrief: 'psychedelic funk-rock guitar over afrobeat grooves, mid-tempo, warm and driving',
+    });
+    expect(result.prompt).toContain('psychedelic funk-rock guitar over afrobeat grooves');
+    expect(result.prompt).not.toContain('psychedelic guitar rock; afrobeat percussion'); // raw join replaced
+    expect(result.recipe.brief).toContain('afrobeat grooves');
+    expect(result.recipe.driver.text).toBe('like jimi hendrix'); // display attribution intact
+  });
 });

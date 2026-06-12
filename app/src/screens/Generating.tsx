@@ -95,6 +95,11 @@ export default function Generating() {
             {recipe?.vocals ? ' · 🎤 sung' : ' · 🎻 instrumental'}
             {destination ? ` · ${destination.name}` : ''}
           </p>
+          {recipe?.brief && (
+            <p className="mt-2 border-t border-white/10 pt-2 text-xs italic text-white/60">
+              the studio hears: {recipe.brief}
+            </p>
+          )}
         </div>
       </div>
 

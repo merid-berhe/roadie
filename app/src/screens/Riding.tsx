@@ -1,29 +1,17 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import type { GestureKind } from '@roadie/shared';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { getPalette } from '../scene/palette';
 import type { RoadId } from '../scene/scenes';
 import { getActualPositionSec, nudgePlayback } from '../audio/player';
-import { isBeatSound, playFireworkAccent, playGestureSound } from '../audio/gestures';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
 const RIDE_DURATION_SEC = 120;
-const FIREWORK_THRESHOLD = RIDE_DURATION_SEC * 0.8; // show firework button at 80%
 const PixiSceneCanvas = lazy(() => import('../scene/SceneCanvas'));
 const PlayCanvasRideScene = lazy(() => import('../scene/PlayCanvasRideScene'));
 
-// Warm reactions (visual) | Beat-locked sounds (audio) — §8
-const WARM: { kind: GestureKind; label: string }[] = [
-  { kind: 'wave',       label: '👋' },
-  { kind: 'headlights', label: '✦'  },
-  { kind: 'heart',      label: '♥'  },
-];
-const SOUNDS: { kind: GestureKind; label: string }[] = [
-  { kind: 'tambourine', label: '♪' },
-  { kind: 'shaker',     label: '≈' },
-  { kind: 'chime',      label: '♫' },
-];
-
+// v5.1 — the ride is the calm payoff: scenery, the song, the two of you.
+// Gesture/firework buttons removed (user verdict: they read as dead weight);
+// live presence lives in the Meeting's dance-off (§8d).
 export default function Riding() {
   const identity = useSession((s) => s.identity);
   const riders    = useRoom((s) => s.riders);
@@ -33,22 +21,8 @@ export default function Riding() {
   const syncPositionSec = useRoom((s) => s.syncPositionSec);
   const selectedRoad    = useRoom((s) => s.selectedRoad) as RoadId;
   const destination     = useRoom((s) => s.destination);
-  const peerGestureKind = useRoom((s) => s.peerGestureKind);
-  const peerGestureAt   = useRoom((s) => s.peerGestureAt);
-  const fireworkSynced  = useRoom((s) => s.fireworkSynced);
-  const fireworkAt      = useRoom((s) => s.fireworkAt);
-  const you  = useRoom((s) => s.you);
-  const send = useRoom((s) => s.send);
 
   const [positionSec, setPositionSec] = useState(0);
-  const [ownGestureKind, setOwnGestureKind] = useState<GestureKind | null>(null);
-  const [fireworkTrigger, setFireworkTrigger] = useState<{ synced: boolean } | null>(null);
-
-  const lastGestureSentRef = useRef(0);
-  const ownGestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fireworkSentRef    = useRef(false);
-  const prevPeerGestureAt  = useRef(0);
-  const prevFireworkAt     = useRef(0);
 
   // rAF position loop (clock-synced)
   useEffect(() => {
@@ -70,40 +44,6 @@ export default function Riding() {
     if (actual != null && Math.abs(actual - syncPositionSec) > 0.25) nudgePlayback(actual - syncPositionSec);
   }, [syncPositionSec]);
 
-  // Peer gesture display — clear after 1.5s
-  useEffect(() => {
-    if (peerGestureAt <= prevPeerGestureAt.current) return;
-    prevPeerGestureAt.current = peerGestureAt;
-  }, [peerGestureKind, peerGestureAt]);
-
-  // Firework reaction — audio accent for server-confirmed synced blooms
-  useEffect(() => {
-    if (fireworkAt <= prevFireworkAt.current || fireworkSynced == null) return;
-    prevFireworkAt.current = fireworkAt;
-    setFireworkTrigger({ synced: fireworkSynced });
-    if (fireworkSynced) playFireworkAccent();
-    setTimeout(() => setFireworkTrigger(null), 100);
-  }, [fireworkSynced, fireworkAt]);
-
-  function sendGesture(kind: GestureKind) {
-    const now = Date.now();
-    if (now - lastGestureSentRef.current < 1000) return; // client-side rate limit
-    lastGestureSentRef.current = now;
-    send({ t: 'gesture', kind });
-    // Own gesture display
-    setOwnGestureKind(kind);
-    if (ownGestureTimerRef.current) clearTimeout(ownGestureTimerRef.current);
-    ownGestureTimerRef.current = setTimeout(() => setOwnGestureKind(null), 1500);
-    // Beat-locked sound for sound gestures
-    if (isBeatSound(kind)) playGestureSound(kind);
-  }
-
-  function sendFirework() {
-    if (fireworkSentRef.current) return;
-    fireworkSentRef.current = true;
-    send({ t: 'firework' });
-  }
-
   const driver   = riders.find((r) => r.role === 'driver');
   const passenger = riders.find((r) => r.role === 'passenger');
   const youRider = riders.find((r) => r.glyph === identity?.glyph);
@@ -112,10 +52,6 @@ export default function Riding() {
   const progress = Math.min(1, positionSec / RIDE_DURATION_SEC);
   const rideRoad = (destination?.theme ?? selectedRoad) as RoadId;
 
-  const driverGestureKind    = you === 'driver' ? ownGestureKind : peerGestureKind;
-  const passengerGestureKind = you === 'passenger' ? ownGestureKind : peerGestureKind;
-
-  const showFireworkBtn = positionSec >= FIREWORK_THRESHOLD && !fireworkSentRef.current;
   const sceneEngine = new URLSearchParams(window.location.search).get('engine');
   const usePixiScene = sceneEngine === 'pixi';
 
@@ -133,9 +69,9 @@ export default function Riding() {
             driverColor={driver?.color ?? '#F5A623'}
             passengerGlyph={passenger?.glyph ?? '●'}
             passengerColor={passenger?.color ?? '#1FB6C4'}
-            driverGestureKind={driverGestureKind}
-            passengerGestureKind={passengerGestureKind}
-            firework={fireworkTrigger}
+            driverGestureKind={null}
+            passengerGestureKind={null}
+            firework={null}
           />
         </Suspense>
       ) : (
@@ -145,39 +81,12 @@ export default function Riding() {
             positionSec={positionSec}
             driverColor={driver?.color ?? '#F5A623'}
             passengerColor={passenger?.color ?? '#1FB6C4'}
-            driverGestureKind={driverGestureKind}
-            passengerGestureKind={passengerGestureKind}
-            firework={fireworkTrigger}
           />
         </Suspense>
       )}
 
       {/* HUD */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-4 pt-2">
-
-        {/* Firework button */}
-        {showFireworkBtn && (
-          <button
-            onClick={sendFirework}
-            className="pointer-events-auto animate-pulse rounded-full bg-amber-400 px-8 py-3 font-semibold text-black shadow-lg"
-          >
-            🎆 launch
-          </button>
-        )}
-
-        {/* Gesture row */}
-        <div className="pointer-events-auto flex gap-2">
-          {[...WARM, ...SOUNDS].map(({ kind, label }) => (
-            <button
-              key={kind}
-              onClick={() => sendGesture(kind)}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-xl active:scale-90"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {/* Progress bar */}
         <div className="h-0.5 w-3/4 rounded-full bg-white/10">
           <div className="h-full rounded-full bg-white/40 transition-all" style={{ width: `${progress * 100}%` }} />
