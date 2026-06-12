@@ -42,8 +42,14 @@ export default function Compose() {
   const peerInstrument = peerChoices['instrument'] ?? null;
   const peerPicked = you ? instruments.includes(peerRole) : false;
   const peerReady = you ? readyRoles.includes(peerRole) : false;
-  const ownCard = you ? promptCards[you] : undefined;
-  const peerCard = you ? promptCards[peerRole] : undefined;
+  // v5.9: authorship follows the CHARACTER, not the seat — roles can be
+  // re-dealt on reconnect, but each card carries its author's character
+  const allCards = [promptCards.driver, promptCards.passenger].filter(Boolean) as
+    { glyph: string; display: string; character?: string }[];
+  const ownCard = allCards.find((c) => c.character && me?.character && c.character === me.character)
+    ?? (you ? promptCards[you] : undefined);
+  const peerCard = allCards.find((c) => c !== ownCard);
+  const peerCardName = characterName(peerCard?.character) ?? peerName;
   const peerWantsVocals = vocalsVotes.includes(peerRole);
   const bothVocals = vocalsVotes.length === 2;
 
@@ -190,7 +196,7 @@ export default function Compose() {
         )}
         {peerCard && (
           <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peerName} wrote <span className="font-semibold">{peerCard.display}</span>
+            {peerCardName} wrote <span className="font-semibold">{peerCard.display}</span>
           </p>
         )}
       </Section>

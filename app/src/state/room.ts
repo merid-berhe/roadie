@@ -17,7 +17,7 @@ type RoomState = {
   recipe: Recipe | null;
   peerChoices: Record<string, string>;
   // §5 v5.0 — gated prompt display cards by role (never raw text)
-  promptCards: Partial<Record<Role, { glyph: string; display: string }>>;
+  promptCards: Partial<Record<Role, { glyph: string; display: string; character?: string }>>;
   promptRejectedAt: number;
   vocalsVotes: Role[];
   // The Meeting (§8d)
@@ -63,7 +63,7 @@ const initial = {
   destination: null as Destination | null,
   recipe: null as Recipe | null,
   peerChoices: {} as Record<string, string>,
-  promptCards: {} as Partial<Record<Role, { glyph: string; display: string }>>,
+  promptCards: {} as Partial<Record<Role, { glyph: string; display: string; character?: string }>>,
   promptRejectedAt: 0,
   vocalsVotes: [] as Role[],
   peerDance: null as { glyph: string; move: DanceMove; at: number } | null,
@@ -110,7 +110,7 @@ export const useRoom = create<RoomState>((set) => ({
           return { peerChoices: { ...state.peerChoices, [msg.field]: msg.value } };
         case 'promptCard':
           return {
-            promptCards: { ...state.promptCards, [msg.role]: { glyph: msg.glyph, display: msg.display } },
+            promptCards: { ...state.promptCards, [msg.role]: { glyph: msg.glyph, display: msg.display, character: msg.character } },
           };
         case 'promptRejected':
           return { promptRejectedAt: Date.now() };

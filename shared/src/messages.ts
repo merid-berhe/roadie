@@ -57,8 +57,9 @@ export type RoomMsg =
     }
   | { t: 'roomFull' }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
-  // §5 v5.0 — the gated display text of a rider's prompt; sent to BOTH riders
-  | { t: 'promptCard'; role: Role; glyph: string; display: string }
+  // §5 v5.0 — the gated display text of a rider's prompt; sent to BOTH riders.
+  // v5.9: carries the author's character so attribution survives reconnects.
+  | { t: 'promptCard'; role: Role; glyph: string; character?: string; display: string }
   | { t: 'promptRejected' } // sender only — gate said no (abuse/unusable)
   | { t: 'generationFailed'; reason: string }
   | { t: 'pong'; sentAt: number; serverTime: number }

@@ -56,6 +56,9 @@ export default class RideRoom implements Party.Server {
   private lastDance = new Map<string, { move: DanceMove; at: number }>();
   private lastDanceSentMs = new Map<string, number>();
 
+  // v5.9 — reconnecting riders (HMR, network blips) keep their seat & character
+  private pastIdentities = new Map<string, { role: Role; character: string }>();
+
   constructor(readonly room: Party.Room) {
     const falKey   = room.env['FAL_KEY']     as string | undefined;
     const mockMode = room.env['MOCK_MUSIC']  as string | undefined;
@@ -108,12 +111,22 @@ export default class RideRoom implements Party.Server {
       if (this.participants.size >= 2) {
         sender.send(JSON.stringify({ t: 'roomFull' } satisfies RoomMsg)); return;
       }
-      const role: Role = this.roleTaken('driver') ? 'passenger' : 'driver';
-      // deal a character nobody in the room is already wearing (v5.4)
-      const taken = new Set([...this.participants.values()].map((p) => p.character));
-      const free = CHARACTER_IDS.filter((id) => !taken.has(id));
-      const character = free[Math.floor(Math.random() * free.length)] ?? CHARACTER_IDS[0];
+      // v5.9: a returning userId reclaims its old seat + character (otherwise a
+      // mid-ride reconnect could swap roles and mis-attribute prompt cards)
+      const past = this.pastIdentities.get(msg.userId);
+      const canRestore = past && !this.roleTaken(past.role);
+      const role: Role = canRestore ? past.role : this.roleTaken('driver') ? 'passenger' : 'driver';
+      let character: string;
+      if (canRestore) {
+        character = past.character;
+      } else {
+        // deal a character nobody in the room is already wearing (v5.4)
+        const taken = new Set([...this.participants.values()].map((p) => p.character));
+        const free = CHARACTER_IDS.filter((id) => !taken.has(id));
+        character = free[Math.floor(Math.random() * free.length)] ?? CHARACTER_IDS[0];
+      }
       this.participants.set(sender.id, { userId: msg.userId, role, glyph: msg.glyph, color: msg.color, character });
+      this.pastIdentities.set(msg.userId, { role, character });
     }
     // Re-send rideStart to a reconnecting client if ride is already underway (§9)
     if (this.phase === 'riding' && this.audioUrl && this.rideStartAt) {
@@ -159,7 +172,7 @@ export default class RideRoom implements Party.Server {
           return;
         }
         this.prompts.set(p.role, { display: res.display, music: res.music });
-        const card: RoomMsg = { t: 'promptCard', role: p.role, glyph: p.glyph, display: res.display };
+        const card: RoomMsg = { t: 'promptCard', role: p.role, glyph: p.glyph, character: p.character, display: res.display };
         for (const connId of this.participants.keys()) {
           this.room.getConnection(connId)?.send(JSON.stringify(card));
         }
