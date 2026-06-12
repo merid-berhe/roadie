@@ -22,7 +22,7 @@ export type Rider = {
 /** Client → Room */
 export type ClientMsg =
   | { t: 'join'; userId: string; glyph: string; color: string }
-  | { t: 'seed'; word: string }
+  | { t: 'instrument'; name: string } // v5.6 — each rider's featured instrument (required)
   | { t: 'road'; roadId: string }  // legacy scene debug control
   // §5 v5.0 — free-text prompt; raw text goes ONLY to the room's gate, the peer
   // sees the gated display text
@@ -46,7 +46,7 @@ export type RoomMsg =
       you: Role;
       riders: Rider[];
       full: boolean;
-      seeded: Role[];
+      instruments: Role[]; // roles that have picked their instrument (v5.6)
       readyRoles: Role[];
       destination: Destination;
       recipe?: Recipe;

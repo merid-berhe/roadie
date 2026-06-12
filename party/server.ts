@@ -26,7 +26,7 @@ export default class RideRoom implements Party.Server {
   private phase: Phase = 'lobby';
 
   // Composition (§5 v5.0 — prompt-first)
-  private seeds = new Map<string, string>();
+  private chosenInstruments = new Map<string, string>();
   private prompts = new Map<Role, { display: string; music: string }>();
   private promptCounts = new Map<string, number>();
   private gateInFlight = 0;
@@ -69,7 +69,7 @@ export default class RideRoom implements Party.Server {
     try { msg = JSON.parse(raw) as ClientMsg; } catch { return; }
     switch (msg.t) {
       case 'join':    return this.handleJoin(msg, sender);
-      case 'seed':    return this.handleSeed(msg, sender);
+      case 'instrument': return this.handleInstrument(msg, sender);
       case 'prompt':  return this.handlePrompt(msg, sender);
       case 'vocals':  return this.handleVocals(msg, sender);
       case 'ready':   return this.handleReady(sender);
@@ -84,7 +84,7 @@ export default class RideRoom implements Party.Server {
 
   onClose(conn: Party.Connection): void {
     if (this.participants.delete(conn.id)) {
-      this.seeds.delete(conn.id);
+      this.chosenInstruments.delete(conn.id);
       this.readyConnIds.delete(conn.id);
       this.lastDance.delete(conn.id);
       if (this.participants.size === 0 && this.syncTimer) {
@@ -124,11 +124,11 @@ export default class RideRoom implements Party.Server {
 
   // --- composition (§5 v5.0) ---
 
-  private handleSeed(msg: Extract<ClientMsg, { t: 'seed' }>, sender: Party.Connection): void {
+  private handleInstrument(msg: Extract<ClientMsg, { t: 'instrument' }>, sender: Party.Connection): void {
     const p = this.participants.get(sender.id);
     if (!p || this.phase !== 'lobby') return;
-    this.seeds.set(sender.id, msg.word);
-    this.broadcastToPeer(sender.id, { t: 'peerChoice', glyph: p.glyph, field: 'seed', value: msg.word });
+    this.chosenInstruments.set(sender.id, msg.name);
+    this.broadcastToPeer(sender.id, { t: 'peerChoice', glyph: p.glyph, field: 'instrument', value: msg.name });
     this.broadcastState();
   }
 
@@ -178,12 +178,12 @@ export default class RideRoom implements Party.Server {
   }
 
   private handleReady(sender: Party.Connection): void {
-    if (!this.seeds.has(sender.id) || this.phase !== 'lobby') return;
+    if (!this.chosenInstruments.has(sender.id) || this.phase !== 'lobby') return;
     this.readyConnIds.add(sender.id);
     this.broadcastState();
     if (this.readyConnIds.size === 2 && this.participants.size === 2) {
-      const allSeeded = [...this.participants.keys()].every((id) => this.seeds.has(id));
-      if (allSeeded) this.fireWhenGateSettles(0);
+      const allPicked = [...this.participants.keys()].every((id) => this.chosenInstruments.has(id));
+      if (allPicked) this.fireWhenGateSettles(0);
     }
   }
 
@@ -203,12 +203,14 @@ export default class RideRoom implements Party.Server {
     const driverConn = this.getConnIdForRole('driver');
     const passengerConn = this.getConnIdForRole('passenger');
     if (!driverConn || !passengerConn) return;
-    const seedDriver = this.seeds.get(driverConn);
-    const seedPassenger = this.seeds.get(passengerConn);
-    if (!seedDriver || !seedPassenger) return;
+    const driverInstrument = this.chosenInstruments.get(driverConn);
+    const passengerInstrument = this.chosenInstruments.get(passengerConn);
+    if (!driverInstrument || !passengerInstrument) return;
 
     const vocals = this.vocalsVotes.get('driver') === true && this.vocalsVotes.get('passenger') === true;
     const opts = {
+      driverInstrument,
+      passengerInstrument,
       driverMusicText: this.prompts.get('driver')?.music,
       passengerMusicText: this.prompts.get('passenger')?.music,
       driverDisplayText: this.prompts.get('driver')?.display,
@@ -217,7 +219,7 @@ export default class RideRoom implements Party.Server {
     };
     // provisional input (raw join) so the Meeting label has the recipe immediately;
     // the producer pass refines it below before the music call
-    this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, opts);
+    this.generationInput = buildPrompt(this.destination, opts);
     this.phase = 'generating';
     this.broadcastState();
 
@@ -230,12 +232,12 @@ export default class RideRoom implements Party.Server {
           const brief = await this.gate.fuse({
             driverText: opts.driverMusicText,
             passengerText: opts.passengerMusicText,
-            moods: [seedDriver, seedPassenger],
+            instruments: [driverInstrument, passengerInstrument],
             destinationFlavor: this.destination.promptFlavor,
             vocals,
           });
           if (brief && this.phase === 'generating') {
-            this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, { ...opts, fusedBrief: brief });
+            this.generationInput = buildPrompt(this.destination, { ...opts, fusedBrief: brief });
             console.log(`[room] producer_brief="${brief.slice(0, 100)}…"`);
             this.broadcastState(); // recipe.brief shows up on the Meeting label
           }
@@ -251,7 +253,6 @@ export default class RideRoom implements Party.Server {
         try {
           const lyr = await this.gate.lyrics({
             brief: this.generationInput!.recipe.brief ?? this.generationInput!.prompt,
-            moods: [seedDriver, seedPassenger],
             destinationName: this.destination.name,
           });
           if (!lyr) throw new Error('empty lyrics');
@@ -261,7 +262,7 @@ export default class RideRoom implements Party.Server {
           this.broadcastState(); // words show on the Meeting label
         } catch (err) {
           console.error('[room] lyrics_failed — falling back to instrumental:', err);
-          this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, {
+          this.generationInput = buildPrompt(this.destination, {
             ...opts,
             fusedBrief: this.generationInput!.recipe.brief,
             vocals: false,
@@ -434,8 +435,8 @@ export default class RideRoom implements Party.Server {
       .sort((a) => (a.role === 'driver' ? -1 : 1));
   }
 
-  private seededRoles(): Role[] {
-    return [...this.seeds.keys()]
+  private instrumentRoles(): Role[] {
+    return [...this.chosenInstruments.keys()]
       .map((id) => this.participants.get(id)?.role)
       .filter((r): r is Role => r !== undefined);
   }
@@ -459,7 +460,7 @@ export default class RideRoom implements Party.Server {
   private broadcastState(): void {
     const riders = this.publicRiders();
     const full = this.participants.size >= 2;
-    const seeded = this.seededRoles();
+    const instruments = this.instrumentRoles();
     const readyRoles = this.readyRolesArr();
     const recipe: Recipe | undefined = this.generationInput?.recipe;
     for (const [connId, p] of this.participants) {
@@ -469,7 +470,7 @@ export default class RideRoom implements Party.Server {
         you: p.role,
         riders,
         full,
-        seeded,
+        instruments,
         readyRoles,
         destination: this.destination,
         recipe,

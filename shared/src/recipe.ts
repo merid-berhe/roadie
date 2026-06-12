@@ -1,62 +1,67 @@
-// §5 — prompt-first composition (v5.0). Each rider contributes a mood word and
-// an optional free-text prompt; fal is the arbiter of interpretation. The gate
-// (party/gate.ts) moderates text and swaps artist names on the music side only.
+// §5 — composition (v5.6): each rider picks ONE instrument (required — the
+// tap-minimum that guarantees a valid song) and writes an optional direction
+// paragraph (≤140 chars). The producer LLM combines both texts + instruments
+// into one coherent brief; fal interprets. Mood words are gone — they made
+// little audible difference and washed out user intent.
 
 import type { Destination } from './destinations';
 
-export const MOOD_WORDS = [
-  'golden-hour',
-  'rainy',
-  'restless',
-  'dreaming',
-  'midnight',
-  'wide-open',
+export const INSTRUMENTS = [
+  'piano',
+  'guitar',
+  'rhodes',
+  'synth',
+  'strings',
+  'saxophone',
+  'trumpet',
+  'percussion',
 ] as const;
 
-export type MoodWord = (typeof MOOD_WORDS)[number];
+export type Instrument = (typeof INSTRUMENTS)[number];
 
-// free-text prompt limits (the §5a gate bounds LLM spend per rider)
-export const PROMPT_MAX_CHARS = 100;
+// free-text direction limits (the §5a gate bounds LLM spend per rider)
+export const PROMPT_MAX_CHARS = 140;
 export const PROMPT_MAX_TRIES = 3;
 
 export const PROMPT_EXAMPLES = [
-  'early-70s soul with warm electric piano',
-  'like a rainy night in a Tokyo taxi',
-  'desert blues, dusty and slow',
-  "my dad's garage band on a Sunday",
-  'strings like the first day of summer',
-  'a song about two strangers driving nowhere',
+  'slow heartbreak soul about leaving a city you love',
+  'rainy-night ethiopian jazz, melancholic but warm',
+  'playful funk about two strangers stuck in traffic',
+  'dreamy synthwave for driving past neon signs at 2am',
+  'triumphant horns — a song about finally quitting',
+  'gentle bossa nova that smells like sunscreen',
 ] as const;
 
 /** The canonical record of what the pair made. Texts are the DISPLAY versions
  * (what both riders saw); the music-side prompt may differ (artist-name swaps). */
 export type Recipe = {
-  driver: { seed: string; text?: string };
-  passenger: { seed: string; text?: string };
+  driver: { instrument: string; text?: string };
+  passenger: { instrument: string; text?: string };
   vocals: boolean;
   brief?: string;  // §5a producer pass — the fused, coherence-enforced direction
   lyrics?: string; // v5.2 — producer-written words (vocal rides only)
 };
 
 /** Server-side, deterministic — §5. durationSec is 120 (2-min ride, decision 2026-06-05).
- * `texts` here are the MUSIC-side versions from the gate (artist names swapped). */
+ * `MusicText`s are the gate's music-side versions (artist names swapped). */
 export function buildPrompt(
-  seedDriver: string,
-  seedPassenger: string,
   destination: Destination | undefined,
   opts: {
+    driverInstrument: string;
+    passengerInstrument: string;
     driverMusicText?: string;
     passengerMusicText?: string;
     driverDisplayText?: string;
     passengerDisplayText?: string;
     vocals?: boolean;
-    /** §5a producer pass — when present, replaces the raw text join as the
+    /** §5a producer pass — when present, replaces the raw join as the
      * musical direction (the coherence/alignment layer). */
     fusedBrief?: string;
-  } = {},
+  },
 ): { prompt: string; bpm: number; durationSec: number; vocals: boolean; recipe: Recipe } {
   const vocals = opts.vocals ?? false;
   const hasText = Boolean(opts.driverMusicText || opts.passengerMusicText);
+  const instruments = `featuring ${opts.driverInstrument} and ${opts.passengerInstrument}`;
   const direction = opts.fusedBrief
     ? opts.fusedBrief
     : [opts.driverMusicText, opts.passengerMusicText].filter(Boolean).join('; ');
@@ -64,18 +69,12 @@ export function buildPrompt(
     ? `inspired by ${destination.name}, ${destination.country} — ${destination.promptFlavor}`
     : '';
 
-  // v5.5: when the riders typed anything, their words ARE the direction — mood
-  // words and road-trip framing stay out of the music prompt (they were
-  // washing user intent into generic "golden hour" output). Moods still drive
-  // the visuals, and they carry the prompt alone when nobody typed.
+  // when the riders typed anything, their words ARE the direction (the fused
+  // brief already folds the instruments in); without text, instruments +
+  // destination carry the song.
   const prompt = (hasText
-    ? [direction, place, vocals ? 'with vocals' : 'instrumental, no vocals']
-    : [
-        `${seedDriver} + ${seedPassenger} mood`,
-        place,
-        'road-trip feel',
-        vocals ? 'with vocals' : 'instrumental, no vocals',
-      ]
+    ? [direction, opts.fusedBrief ? '' : instruments, place, vocals ? 'with vocals' : 'instrumental, no vocals']
+    : [instruments, place, 'road-trip feel', vocals ? 'with vocals' : 'instrumental, no vocals']
   )
     .filter(Boolean)
     .join(', ');
@@ -86,8 +85,8 @@ export function buildPrompt(
     durationSec: 120,
     vocals,
     recipe: {
-      driver: { seed: seedDriver, ...(opts.driverDisplayText ? { text: opts.driverDisplayText } : {}) },
-      passenger: { seed: seedPassenger, ...(opts.passengerDisplayText ? { text: opts.passengerDisplayText } : {}) },
+      driver: { instrument: opts.driverInstrument, ...(opts.driverDisplayText ? { text: opts.driverDisplayText } : {}) },
+      passenger: { instrument: opts.passengerInstrument, ...(opts.passengerDisplayText ? { text: opts.passengerDisplayText } : {}) },
       vocals,
       ...(opts.fusedBrief ? { brief: opts.fusedBrief } : {}),
     },

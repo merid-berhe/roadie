@@ -54,7 +54,11 @@ export default function Riding() {
   const passenger = riders.find((r) => r.role === 'passenger');
   const youRider = riders.find((r) => r.glyph === identity?.glyph);
 
-  const palette  = getPalette(recipe?.driver.seed, recipe?.passenger.seed);
+  // v5.6: mood words are gone — the destination theme drives the palette
+  const themeWord = ({ desert: 'golden-hour', coast: 'wide-open', mountain: 'rainy', city: 'midnight' } as Record<string, string>)[
+    (destination?.theme ?? selectedRoad) as string
+  ];
+  const palette  = getPalette(themeWord, themeWord);
   const progress = Math.min(1, positionSec / RIDE_DURATION_SEC);
   const rideRoad = (destination?.theme ?? selectedRoad) as RoadId;
 
@@ -102,9 +106,9 @@ export default function Riding() {
 
         {/* Attribution + role */}
         <div className="flex items-center gap-4">
-          {driver && <span className="text-xs" style={{ color: driver.color }}>{characterName(driver.character) ?? driver.glyph} · {recipe?.driver.seed}</span>}
+          {driver && <span className="text-xs" style={{ color: driver.color }}>{characterName(driver.character) ?? driver.glyph} · {recipe?.driver.instrument}</span>}
           <span className="text-xs text-white/20">×</span>
-          {passenger && <span className="text-xs" style={{ color: passenger.color }}>{characterName(passenger.character) ?? passenger.glyph} · {recipe?.passenger.seed}</span>}
+          {passenger && <span className="text-xs" style={{ color: passenger.color }}>{characterName(passenger.character) ?? passenger.glyph} · {recipe?.passenger.instrument}</span>}
         </div>
         {destination && (
           <p className="max-w-[18rem] truncate text-xs text-white/35">

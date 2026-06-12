@@ -11,7 +11,7 @@ type RoomState = {
   you: Role | null;
   riders: Rider[];
   full: boolean;
-  seeded: Role[];
+  instruments: Role[];
   readyRoles: Role[];
   destination: Destination | null;
   recipe: Recipe | null;
@@ -57,7 +57,7 @@ const initial = {
   you: null as Role | null,
   riders: [] as Rider[],
   full: false,
-  seeded: [] as Role[],
+  instruments: [] as Role[],
   readyRoles: [] as Role[],
   destination: null as Destination | null,
   recipe: null as Recipe | null,
@@ -95,7 +95,7 @@ export const useRoom = create<RoomState>((set) => ({
             you: msg.you,
             riders: msg.riders,
             full: msg.full,
-            seeded: msg.seeded,
+            instruments: msg.instruments,
             readyRoles: msg.readyRoles,
             destination: msg.destination,
             recipe: msg.recipe ?? state.recipe,

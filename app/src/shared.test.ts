@@ -27,55 +27,63 @@ describe('destinations', () => {
   });
 });
 
-describe('buildPrompt (§5 v5.0 — prompt-first)', () => {
+describe('buildPrompt (§5 v5.6 — instruments + direction paragraphs)', () => {
   const destination = DESTINATIONS[0];
 
-  it('user texts lead the prompt — mood words stay OUT when anyone typed (v5.5)', () => {
-    const result = buildPrompt('midnight', 'wide-open', destination, {
-      driverMusicText: 'early-70s warm soul with mellow electric piano',
-      passengerMusicText: 'dusty desert blues',
-      driverDisplayText: 'like bill withers',
-      passengerDisplayText: 'dusty desert blues',
+  it('user texts lead the prompt; instruments ride along via the brief', () => {
+    const result = buildPrompt(destination, {
+      driverInstrument: 'saxophone',
+      passengerInstrument: 'rhodes',
+      driverMusicText: 'rainy-night ethiopian jazz, melancholic but warm',
+      passengerMusicText: 'something dreamy with strings',
+      driverDisplayText: 'rainy-night ethiopian jazz, melancholic but warm',
+      passengerDisplayText: 'something dreamy with strings',
     });
 
-    expect(result.prompt).toContain('early-70s warm soul');
-    expect(result.prompt).toContain('dusty desert blues');
-    expect(result.prompt).not.toContain('midnight'); // moods drive visuals only
-    expect(result.prompt).not.toContain('road-trip'); // no generic washing
+    expect(result.prompt).toContain('ethiopian jazz');
+    expect(result.prompt).toContain('featuring saxophone and rhodes'); // no brief yet → raw path
+    expect(result.prompt).not.toContain('road-trip'); // no generic washing on the text path
     expect(result.prompt).toContain(destination.name);
     expect(result.prompt).toContain('no vocals'); // instrumental by default
-    // the recipe records the DISPLAY texts (what the riders saw), not the music-side swaps
-    expect(result.recipe.driver.text).toBe('like bill withers');
+    expect(result.recipe.driver.instrument).toBe('saxophone');
+    expect(result.recipe.driver.text).toContain('ethiopian jazz');
     expect(result.recipe.vocals).toBe(false);
   });
 
-  it('moods carry the prompt when nobody typed anything', () => {
-    const result = buildPrompt('rainy', 'dreaming', destination, {});
-    expect(result.prompt).toContain('rainy + dreaming mood');
+  it('a fused producer brief replaces the raw join AND the instrument tag', () => {
+    const result = buildPrompt(destination, {
+      driverInstrument: 'saxophone',
+      passengerInstrument: 'rhodes',
+      driverMusicText: 'ethiopian jazz',
+      passengerMusicText: 'dreamy strings',
+      fusedBrief: 'melancholic Ethio-jazz with smoky saxophone leads over warm rhodes and soft strings, slow swing',
+    });
+    expect(result.prompt).toContain('Ethio-jazz with smoky saxophone');
+    expect(result.prompt).not.toContain('ethiopian jazz; dreamy strings'); // raw join replaced
+    expect(result.prompt).not.toContain('featuring saxophone and rhodes'); // brief carries them
+    expect(result.recipe.brief).toContain('rhodes');
+  });
+
+  it('instruments + destination carry the song when nobody typed', () => {
+    const result = buildPrompt(destination, {
+      driverInstrument: 'piano',
+      passengerInstrument: 'percussion',
+    });
+    expect(result.prompt).toContain('featuring piano and percussion');
     expect(result.prompt).toContain('road-trip feel');
     expect(result.prompt).toContain('instrumental');
     expect(result.recipe.driver.text).toBeUndefined();
   });
 
   it('flips to vocals only when asked (both-opt-in is enforced server-side)', () => {
-    const result = buildPrompt('rainy', 'dreaming', destination, { vocals: true });
+    const result = buildPrompt(destination, {
+      driverInstrument: 'guitar',
+      passengerInstrument: 'synth',
+      vocals: true,
+    });
     expect(result.vocals).toBe(true);
     expect(result.prompt).toContain('with vocals');
     expect(result.prompt).not.toContain('no vocals');
     expect(result.recipe.vocals).toBe(true);
-  });
-
-  it('a fused producer brief replaces the raw text join (§5a alignment)', () => {
-    const result = buildPrompt('midnight', 'wide-open', destination, {
-      driverMusicText: 'psychedelic guitar rock',
-      passengerMusicText: 'afrobeat percussion',
-      driverDisplayText: 'like jimi hendrix',
-      passengerDisplayText: 'afro beats',
-      fusedBrief: 'psychedelic funk-rock guitar over afrobeat grooves, mid-tempo, warm and driving',
-    });
-    expect(result.prompt).toContain('psychedelic funk-rock guitar over afrobeat grooves');
-    expect(result.prompt).not.toContain('psychedelic guitar rock; afrobeat percussion'); // raw join replaced
-    expect(result.recipe.brief).toContain('afrobeat grooves');
-    expect(result.recipe.driver.text).toBe('like jimi hendrix'); // display attribution intact
   });
 });

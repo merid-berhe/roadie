@@ -115,12 +115,12 @@ export default function Arrival({ onDone }: Props) {
         <div className="flex flex-col gap-1 text-center text-sm">
           {driver && (
             <p style={{ color: driver.color }}>
-              {characterName(driver.character) ?? driver.glyph} {recipe.driver.text ? `“${recipe.driver.text}”` : `brought the ${recipe.driver.seed} mood`}
+              {characterName(driver.character) ?? driver.glyph} {recipe.driver.text ? `“${recipe.driver.text}”` : `brought the ${recipe.driver.instrument}`}
             </p>
           )}
           {passenger && (
             <p style={{ color: passenger.color }}>
-              {characterName(passenger.character) ?? passenger.glyph} {recipe.passenger.text ? `“${recipe.passenger.text}”` : `brought the ${recipe.passenger.seed} mood`}
+              {characterName(passenger.character) ?? passenger.glyph} {recipe.passenger.text ? `“${recipe.passenger.text}”` : `brought the ${recipe.passenger.instrument}`}
             </p>
           )}
         </div>

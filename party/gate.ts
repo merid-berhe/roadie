@@ -15,7 +15,7 @@ export interface GateResult {
 export interface FuseInput {
   driverText?: string;     // music-side texts (artist names already swapped)
   passengerText?: string;
-  moods: [string, string];
+  instruments: [string, string]; // v5.6 — each rider's featured instrument
   destinationFlavor?: string;
   vocals: boolean;
 }
@@ -27,7 +27,7 @@ export interface PromptGate {
   fuse(input: FuseInput): Promise<string | null>;
   /** v5.2: MiniMax requires lyrics text when is_instrumental=false — the
    * producer writes them from the fused brief. */
-  lyrics(input: { brief: string; moods: [string, string]; destinationName?: string }): Promise<string | null>;
+  lyrics(input: { brief: string; destinationName?: string }): Promise<string | null>;
 }
 
 const SYSTEM_PROMPT = `You are a content gate for a cozy two-player music game where players type a short prompt (up to 100 characters) describing the song they want to make together. You do NOT rewrite their creative intent.
@@ -37,12 +37,13 @@ Rules:
 - "music" equals "display" EXCEPT: replace any artist, band, or song names with concise style descriptors of that artist's sound (e.g. "like Bill Withers" → "like early-70s warm soul with mellow electric piano"). If there are no such names, "music" is identical to "display".
 - Never add content the player didn't imply. Keep both under 160 characters.`;
 
-const FUSE_SYSTEM_PROMPT = `You are the record producer for a two-player music game. Two players each wrote a short request for ONE shared song. Write a single music-generation brief that fuses their requests into one coherent, genuinely listenable track.
+const FUSE_SYSTEM_PROMPT = `You are the record producer for a two-player music game. Two players each picked a featured instrument and wrote a short direction for ONE shared song. Write a single music-generation brief that fuses everything into one coherent, genuinely listenable track.
 Rules:
-- THE PLAYERS' REQUESTS ARE THE DIRECTION. Be specific and faithful to them: if they ask for Ethiopian jazz, the brief is unmistakably Ethiopian jazz (pentatonic horn lines, vintage organ, swinging drums) — never dilute a specific request into generic mood music.
-- Pick ONE unifying fusion when the two requests differ. Honor a recognizable element of EACH.
-- Be concrete: genre, tempo feel, 2–4 instruments, groove, mood.
-- Any setting/mood context provided is light seasoning only — a word or two at most, never the lead.
+- THE PLAYERS' WRITTEN DIRECTIONS LEAD. Be specific and faithful to them: if they ask for Ethiopian jazz, the brief is unmistakably Ethiopian jazz (pentatonic horn lines, vintage organ, swinging drums) — never dilute a specific request into generic mood music.
+- BOTH featured instruments must be clearly present in the brief.
+- Pick ONE unifying fusion when the two directions differ. Honor a recognizable element of EACH.
+- Be concrete: genre, tempo feel, instruments, groove, mood.
+- Any setting context provided is light seasoning only — a word or two at most, never the lead.
 - No artist, band, or song names. Plain descriptive English. Maximum 220 characters.
 - Output ONLY the brief text, no quotes, no preamble.`;
 
@@ -96,11 +97,10 @@ export class FalLlmGate implements PromptGate {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {
-      // v5.5: mood words deliberately excluded — they were washing user intent
-      // into generic output. The players' texts lead; setting is seasoning.
       const parts = [
-        input.driverText ? `Player A asked for: ${input.driverText}` : null,
-        input.passengerText ? `Player B asked for: ${input.passengerText}` : null,
+        input.driverText ? `Player A's direction: ${input.driverText}` : null,
+        input.passengerText ? `Player B's direction: ${input.passengerText}` : null,
+        `Player A's featured instrument: ${input.instruments[0]}. Player B's: ${input.instruments[1]}.`,
         input.destinationFlavor ? `Setting (seasoning only): ${input.destinationFlavor}.` : null,
         input.vocals ? 'The track will have vocals.' : 'The track is instrumental.',
       ].filter(Boolean).join('\n');
@@ -124,7 +124,7 @@ export class FalLlmGate implements PromptGate {
     }
   }
 
-  async lyrics(input: { brief: string; moods: [string, string]; destinationName?: string }): Promise<string | null> {
+  async lyrics(input: { brief: string; destinationName?: string }): Promise<string | null> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {
@@ -134,7 +134,7 @@ export class FalLlmGate implements PromptGate {
         body: JSON.stringify({
           model: 'openai/gpt-4o-mini',
           system_prompt: LYRICS_SYSTEM_PROMPT,
-          prompt: `Brief: ${input.brief}\nMoods: ${input.moods[0]} + ${input.moods[1]}.${input.destinationName ? ` Place: ${input.destinationName}.` : ''}`,
+          prompt: `Brief: ${input.brief}${input.destinationName ? `\nPlace: ${input.destinationName}.` : ''}`,
         }),
         signal: ctrl.signal,
       });
@@ -165,11 +165,11 @@ export class MockPromptGate implements PromptGate {
   async fuse(input: FuseInput): Promise<string | null> {
     await new Promise<void>((r) => setTimeout(r, 300));
     const bits = [input.driverText, input.passengerText].filter(Boolean).join(' meets ');
-    return bits ? `${bits}, fused into one ${input.moods[0]} groove (mock brief)` : null;
+    return bits ? `${bits}, featuring ${input.instruments[0]} and ${input.instruments[1]} (mock brief)` : null;
   }
 
-  async lyrics(input: { brief: string; moods: [string, string]; destinationName?: string }): Promise<string | null> {
+  async lyrics(input: { brief: string; destinationName?: string }): Promise<string | null> {
     await new Promise<void>((r) => setTimeout(r, 200));
-    return `mock verse about the ${input.moods[0]} road\nmock chorus we sing together\n(mock lyrics for: ${input.brief.slice(0, 40)})`;
+    return `mock verse about the open road\nmock chorus we sing together\n(mock lyrics for: ${input.brief.slice(0, 40)})`;
   }
 }

@@ -94,7 +94,7 @@ export default function Generating() {
             </p>
           )}
           <p className="mt-1 text-xs text-white/50">
-            {recipe ? `${recipe.driver.seed} + ${recipe.passenger.seed}` : ''}
+            {recipe ? `${recipe.driver.instrument} + ${recipe.passenger.instrument}` : ''}
             {recipe?.vocals ? ' · 🎤 sung' : ' · 🎻 instrumental'}
             {destination ? ` · ${destination.name}` : ''}
           </p>

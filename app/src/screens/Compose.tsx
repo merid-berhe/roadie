@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  MOOD_WORDS,
+  INSTRUMENTS,
   PROMPT_EXAMPLES,
   PROMPT_MAX_CHARS,
   PROMPT_MAX_TRIES,
@@ -17,7 +17,7 @@ export default function Compose() {
   const identity = useSession((s) => s.identity);
   const you = useRoom((s) => s.you);
   const riders = useRoom((s) => s.riders);
-  const seeded = useRoom((s) => s.seeded);
+  const instruments = useRoom((s) => s.instruments);
   const readyRoles = useRoom((s) => s.readyRoles);
   const destination = useRoom((s) => s.destination);
   const peerChoices = useRoom((s) => s.peerChoices);
@@ -26,7 +26,7 @@ export default function Compose() {
   const vocalsVotes = useRoom((s) => s.vocalsVotes);
   const send = useRoom((s) => s.send);
 
-  const [ownSeed, setOwnSeed] = useState<string | null>(null);
+  const [ownInstrument, setOwnInstrument] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [promptText, setPromptText] = useState('');
   const [promptTries, setPromptTries] = useState(0);
@@ -39,8 +39,8 @@ export default function Compose() {
   const me = riders.find((r) => r.role === you);
   const peerRole = you === 'driver' ? 'passenger' : 'driver';
   const peerName = characterName(peer?.character) ?? 'your co-rider';
-  const peerSeed = peerChoices['seed'] ?? null;
-  const peerSeeded = you ? seeded.includes(peerRole) : false;
+  const peerInstrument = peerChoices['instrument'] ?? null;
+  const peerPicked = you ? instruments.includes(peerRole) : false;
   const peerReady = you ? readyRoles.includes(peerRole) : false;
   const ownCard = you ? promptCards[you] : undefined;
   const peerCard = you ? promptCards[peerRole] : undefined;
@@ -61,9 +61,9 @@ export default function Compose() {
     track('prompt_rejected');
   }, [promptRejectedAt]);
 
-  function pickSeed(word: string) {
-    setOwnSeed(word);
-    send({ t: 'seed', word });
+  function pickInstrument(name: string) {
+    setOwnInstrument(name);
+    send({ t: 'instrument', name });
   }
 
   function submitPrompt() {
@@ -84,10 +84,12 @@ export default function Compose() {
   }
 
   function goReady() {
-    if (!ownSeed || isReady) return;
+    if (!ownInstrument || isReady) return;
     setIsReady(true);
     send({ t: 'ready' });
   }
+
+  const charsLeft = PROMPT_MAX_CHARS - promptText.length;
 
   return (
     <main className="flex min-h-full flex-col bg-[#0b1020] px-5 pb-32 pt-8 text-white">
@@ -118,33 +120,33 @@ export default function Compose() {
         </Section>
       )}
 
-      {/* Mood seed */}
-      <Section title="PICK A MOOD">
+      {/* Featured instrument — the required tap */}
+      <Section title="PICK YOUR INSTRUMENT">
         <div className="grid grid-cols-2 gap-2">
-          {MOOD_WORDS.map((word) => (
+          {INSTRUMENTS.map((name) => (
             <ChoiceButton
-              key={word}
-              label={word}
-              selected={ownSeed === word}
+              key={name}
+              label={name}
+              selected={ownInstrument === name}
               color={identity?.color}
-              onSelect={() => pickSeed(word)}
+              onSelect={() => pickInstrument(name)}
             />
           ))}
         </div>
-        {peerSeed && (
+        {peerInstrument && (
           <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peerName} picked <span className="font-semibold">{peerSeed}</span>
+            {peerName} brings the <span className="font-semibold">{peerInstrument}</span>
           </p>
         )}
-        {!peerSeeded && !peerSeed && (
-          <p className="mt-2 text-xs text-white/30">waiting for co-rider's mood…</p>
+        {!peerPicked && !peerInstrument && (
+          <p className="mt-2 text-xs text-white/30">waiting for co-rider's instrument…</p>
         )}
       </Section>
 
-      {/* Free-text prompt — the heart of the song */}
+      {/* Direction paragraph — the heart of the song */}
       <Section title="WRITE THE SONG">
         <p className="mb-2 text-xs text-white/35">
-          describe the song you want — the studio blends both of your prompts into one track
+          describe the mood and lyrical direction for your song — the studio blends both riders' directions into one track
         </p>
         {ownCard && (
           <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
@@ -154,21 +156,28 @@ export default function Compose() {
           </div>
         )}
         {(!ownCard || promptTries < PROMPT_MAX_TRIES) && (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={promptText}
-              maxLength={PROMPT_MAX_CHARS}
-              placeholder={`e.g. ${promptExample}`}
-              onChange={(e) => setPromptText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitPrompt(); }}
-              disabled={promptPending || promptTries >= PROMPT_MAX_TRIES}
-              className="min-w-0 flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-white/30 focus:outline-none disabled:opacity-50"
-            />
+          <div className="flex flex-col gap-2">
+            <div className="relative">
+              <textarea
+                value={promptText}
+                maxLength={PROMPT_MAX_CHARS}
+                rows={3}
+                placeholder={`e.g. ${promptExample}`}
+                onChange={(e) => setPromptText(e.target.value)}
+                disabled={promptPending || promptTries >= PROMPT_MAX_TRIES}
+                className="w-full resize-none rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 pb-6 text-sm leading-5 text-white placeholder:text-white/25 focus:border-white/30 focus:outline-none disabled:opacity-50"
+              />
+              <span
+                className="pointer-events-none absolute bottom-2 right-3 text-xs tabular-nums"
+                style={{ color: charsLeft <= 15 ? '#fbbf24' : 'rgba(255,255,255,0.3)' }}
+              >
+                {charsLeft}
+              </span>
+            </div>
             <button
               onClick={submitPrompt}
               disabled={!promptText.trim() || promptPending || promptTries >= PROMPT_MAX_TRIES}
-              className="rounded-lg border border-white/12 px-3 py-2 text-sm text-white/70 transition active:scale-95 disabled:opacity-40"
+              className="self-end rounded-lg border border-white/12 px-4 py-2 text-sm text-white/70 transition active:scale-95 disabled:opacity-40"
             >
               {promptPending ? 'sending…' : ownCard ? 'rewrite' : 'send it'}
             </button>
@@ -212,14 +221,14 @@ export default function Compose() {
 
       {/* Let's drive */}
       <div className="fixed bottom-6 left-0 right-0 flex flex-col items-center gap-2 px-5">
-        {!ownSeed && <p className="text-xs text-white/40">still need: a mood word</p>}
+        {!ownInstrument && <p className="text-xs text-white/40">still need: your instrument</p>}
         <button
           onClick={goReady}
           disabled={isReady}
           className="w-full max-w-xs rounded-full py-4 text-lg font-semibold transition active:scale-95"
           style={{
-            background: ownSeed ? '#F5A623' : 'rgba(255,255,255,0.1)',
-            color: ownSeed ? '#000' : 'rgba(255,255,255,0.3)',
+            background: ownInstrument ? '#F5A623' : 'rgba(255,255,255,0.1)',
+            color: ownInstrument ? '#000' : 'rgba(255,255,255,0.3)',
           }}
         >
           {isReady ? 'waiting for co-rider…' : "Let's drive"}
