@@ -1,20 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
-  DRIVER_OPTIONS,
   MOOD_WORDS,
-  PASSENGER_OPTIONS,
-  WHISPER_EXAMPLES,
-  WHISPER_MAX_CHARS,
-  WHISPER_MAX_TRIES,
-  type DriverChoices,
-  type PassengerChoices,
+  PROMPT_EXAMPLES,
+  PROMPT_MAX_CHARS,
+  PROMPT_MAX_TRIES,
 } from '@roadie/shared';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 import { track } from '../lib/analytics';
 
-type AnyChoices = Partial<DriverChoices & PassengerChoices>;
-
+// §5 v5.0 — prompt-first composition: a mood word each (drives the visuals,
+// guarantees a valid song with zero typing) + an optional free-text prompt.
+// fal is the arbiter of interpretation; the gate only moderates.
 export default function Compose() {
   const identity = useSession((s) => s.identity);
   const you = useRoom((s) => s.you);
@@ -23,85 +20,71 @@ export default function Compose() {
   const readyRoles = useRoom((s) => s.readyRoles);
   const destination = useRoom((s) => s.destination);
   const peerChoices = useRoom((s) => s.peerChoices);
+  const promptCards = useRoom((s) => s.promptCards);
+  const promptRejectedAt = useRoom((s) => s.promptRejectedAt);
+  const vocalsVotes = useRoom((s) => s.vocalsVotes);
   const send = useRoom((s) => s.send);
 
-  const whisperCards = useRoom((s) => s.whisperCards);
-  const whisperRejectedAt = useRoom((s) => s.whisperRejectedAt);
-  const radioLocked = useRoom((s) => s.radioLocked);
+  const [ownSeed, setOwnSeed] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [promptText, setPromptText] = useState('');
+  const [promptTries, setPromptTries] = useState(0);
+  const [promptPending, setPromptPending] = useState(false);
+  const [promptFailed, setPromptFailed] = useState(false);
+  const [ownVocals, setOwnVocals] = useState(false);
+  const [promptExample] = useState(() => PROMPT_EXAMPLES[Math.floor(Math.random() * PROMPT_EXAMPLES.length)]);
 
-  const [ownSeed, setOwnSeed]     = useState<string | null>(null);
-  const [ownChoices, setOwnChoices] = useState<AnyChoices>({});
-  const [isReady, setIsReady]     = useState(false);
-  const [whisperText, setWhisperText] = useState('');
-  const [whisperTries, setWhisperTries] = useState(0);
-  const [whisperPending, setWhisperPending] = useState(false);
-  const [whisperExample] = useState(() => WHISPER_EXAMPLES[Math.floor(Math.random() * WHISPER_EXAMPLES.length)]);
-
-  const [whisperFailed, setWhisperFailed] = useState(false);
-
-  const ownCard = you ? whisperCards[you] : undefined;
-  const peerCard = you ? whisperCards[you === 'driver' ? 'passenger' : 'driver'] : undefined;
+  const peer = riders.find((r) => r.role !== you);
+  const peerRole = you === 'driver' ? 'passenger' : 'driver';
+  const peerSeed = peerChoices['seed'] ?? null;
+  const peerSeeded = you ? seeded.includes(peerRole) : false;
+  const peerReady = you ? readyRoles.includes(peerRole) : false;
+  const ownCard = you ? promptCards[you] : undefined;
+  const peerCard = you ? promptCards[peerRole] : undefined;
+  const peerWantsVocals = vocalsVotes.includes(peerRole);
+  const bothVocals = vocalsVotes.length === 2;
 
   useEffect(() => {
     if (!ownCard) return;
-    setWhisperPending(false);
-    setWhisperFailed(false);
-    track('whisper_tuned', { style: ownCard.style });
+    setPromptPending(false);
+    setPromptFailed(false);
+    track('prompt_accepted', { display: ownCard.display });
   }, [ownCard]);
 
   useEffect(() => {
-    if (whisperRejectedAt === 0) return;
-    setWhisperPending(false);
-    setWhisperFailed(true);
-    track('whisper_rejected');
-  }, [whisperRejectedAt]);
-
-  function submitWhisper() {
-    const text = whisperText.trim();
-    if (!text || whisperPending || whisperTries >= WHISPER_MAX_TRIES) return;
-    setWhisperTries((n) => n + 1);
-    setWhisperPending(true);
-    setWhisperFailed(false);
-    send({ t: 'whisper', text });
-    track('whisper_submitted');
-  }
-
-  const peer = riders.find((r) => r.role !== you);
-  const peerSeed = peerChoices['seed'] ?? null;
-  const peerSeeded = you ? seeded.includes(you === 'driver' ? 'passenger' : 'driver') : false;
-  const peerReady = you ? readyRoles.includes(you === 'driver' ? 'passenger' : 'driver') : false;
-
-  const options = you === 'driver' ? DRIVER_OPTIONS : PASSENGER_OPTIONS;
-  const peerOptions = you === 'driver' ? PASSENGER_OPTIONS : DRIVER_OPTIONS;
-  const optionKeys = Object.keys(options) as Array<keyof typeof options>;
-  const peerOptionKeys = Object.keys(peerOptions) as Array<keyof typeof peerOptions>;
-
-  const missingItems: string[] = [];
-  if (ownSeed === null) missingItems.push('a mood word');
-  for (const k of optionKeys) {
-    if (ownChoices[k as keyof AnyChoices] === undefined)
-      missingItems.push((k as string).replace('_', ' '));
-  }
-  const allOwnChosen = missingItems.length === 0;
+    if (promptRejectedAt === 0) return;
+    setPromptPending(false);
+    setPromptFailed(true);
+    track('prompt_rejected');
+  }, [promptRejectedAt]);
 
   function pickSeed(word: string) {
     setOwnSeed(word);
     send({ t: 'seed', word });
   }
 
-  function pickChoice(field: string, value: string) {
-    setOwnChoices((prev) => ({ ...prev, [field]: value }));
-    send({ t: 'choice', field, value });
+  function submitPrompt() {
+    const text = promptText.trim();
+    if (!text || promptPending || promptTries >= PROMPT_MAX_TRIES) return;
+    setPromptTries((n) => n + 1);
+    setPromptPending(true);
+    setPromptFailed(false);
+    send({ t: 'prompt', text });
+    track('prompt_submitted');
+  }
+
+  function toggleVocals() {
+    const next = !ownVocals;
+    setOwnVocals(next);
+    send({ t: 'vocals', on: next });
+    track('vocals_voted', { on: next });
   }
 
   function goReady() {
-    if (!allOwnChosen || isReady) return;
+    if (!ownSeed || isReady) return;
     setIsReady(true);
     send({ t: 'ready' });
   }
-
-  const roleLabel = you === 'driver' ? 'DRIVER — THE FOUNDATION' : 'PASSENGER — THE COLOR';
-  const peerRoleLabel = you === 'driver' ? "CO-RIDER'S COLOR" : "CO-RIDER'S FOUNDATION";
 
   return (
     <main className="flex min-h-full flex-col bg-[#0b1020] px-5 pb-32 pt-8 text-white">
@@ -140,99 +123,76 @@ export default function Compose() {
           ))}
         </div>
         {peerSeed && (
-          <PeerPick glyph={peer?.glyph} color={peer?.color} field="mood" value={peerSeed} />
+          <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
+            {peer?.glyph} picked <span className="font-semibold">{peerSeed}</span>
+          </p>
         )}
         {!peerSeeded && !peerSeed && (
           <p className="mt-2 text-xs text-white/30">waiting for co-rider's mood…</p>
         )}
       </Section>
 
-      {/* Own role choices */}
-      <Section title={roleLabel}>
-        {optionKeys.map((field) => (
-          <div key={field} className="mb-4">
-            <p className="mb-2 text-xs uppercase tracking-wider text-white/40">{(field as string).replace('_', ' ')}</p>
-            <div className="flex gap-2">
-              {(options[field as keyof typeof options] as readonly string[]).map((val) => (
-                <ChoiceButton
-                  key={val}
-                  label={val}
-                  selected={ownChoices[field as keyof AnyChoices] === val}
-                  color={identity?.color}
-                  onSelect={() => pickChoice(field, val)}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </Section>
-
-      {/* §5a Tune the radio — optional free text, LLM-gated server-side */}
-      <Section title="TUNE THE RADIO (OPTIONAL)">
+      {/* Free-text prompt — the heart of the song */}
+      <Section title="WRITE THE SONG">
         <p className="mb-2 text-xs text-white/35">
-          whisper a vibe to the radio — it tunes your words into the song
+          describe the song you want — the studio blends both of your prompts into one track
         </p>
-        {ownCard ? (
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+        {ownCard && (
+          <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
             <p className="text-xs" style={{ color: identity?.color }}>
-              📻 tuned to: <span className="font-semibold">{ownCard.style}</span>
+              {identity?.glyph} <span className="font-semibold">{ownCard.display}</span>
             </p>
           </div>
-        ) : null}
-        {radioLocked && (
-          <p className="mt-2 text-xs text-white/35">📻 the radio's set — your song is already being recorded</p>
         )}
-        {!radioLocked && (!ownCard || whisperTries < WHISPER_MAX_TRIES) ? (
-          <div className="mt-2 flex gap-2">
+        {(!ownCard || promptTries < PROMPT_MAX_TRIES) && (
+          <div className="flex gap-2">
             <input
               type="text"
-              value={whisperText}
-              maxLength={WHISPER_MAX_CHARS}
-              placeholder={`e.g. ${whisperExample}`}
-              onChange={(e) => setWhisperText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitWhisper(); }}
-              disabled={whisperPending || whisperTries >= WHISPER_MAX_TRIES}
+              value={promptText}
+              maxLength={PROMPT_MAX_CHARS}
+              placeholder={`e.g. ${promptExample}`}
+              onChange={(e) => setPromptText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitPrompt(); }}
+              disabled={promptPending || promptTries >= PROMPT_MAX_TRIES}
               className="min-w-0 flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/25 focus:border-white/30 focus:outline-none disabled:opacity-50"
             />
             <button
-              onClick={submitWhisper}
-              disabled={!whisperText.trim() || whisperPending || whisperTries >= WHISPER_MAX_TRIES}
+              onClick={submitPrompt}
+              disabled={!promptText.trim() || promptPending || promptTries >= PROMPT_MAX_TRIES}
               className="rounded-lg border border-white/12 px-3 py-2 text-sm text-white/70 transition active:scale-95 disabled:opacity-40"
             >
-              {whisperPending ? 'tuning…' : ownCard ? 're-tune' : 'tune in'}
+              {promptPending ? 'sending…' : ownCard ? 'rewrite' : 'send it'}
             </button>
           </div>
-        ) : null}
-        {whisperFailed && !radioLocked && (
-          <p className="mt-2 text-xs text-amber-400/80">
-            static… the radio couldn't tune to that. try different words?
-          </p>
         )}
-        {whisperTries >= WHISPER_MAX_TRIES && !ownCard && (
-          <p className="mt-2 text-xs text-white/30">the radio's had enough fiddling for one ride</p>
+        {promptFailed && (
+          <p className="mt-2 text-xs text-amber-400/80">
+            the studio couldn't take that one. try different words?
+          </p>
         )}
         {peerCard && (
           <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peerCard.glyph} tuned the radio to <span className="font-semibold">{peerCard.style}</span>
+            {peerCard.glyph} wrote <span className="font-semibold">{peerCard.display}</span>
           </p>
         )}
       </Section>
 
-      {/* Peer's choices (read-only, appear as they land) */}
-      {peerOptionKeys.some((k) => peerChoices[k] !== undefined) && (
-        <Section title={peerRoleLabel}>
-          {peerOptionKeys.map((field) => {
-            const val = peerChoices[field as string];
-            if (!val) return null;
-            return (
-              <div key={field as string} className="mb-2">
-                <p className="text-xs uppercase tracking-wider text-white/30">{(field as string).replace('_', ' ')}</p>
-                <PeerPick glyph={peer?.glyph} color={peer?.color} field="" value={val} />
-              </div>
-            );
-          })}
-        </Section>
-      )}
+      {/* Vocals — both must opt in (§12) */}
+      <Section title="VOICE">
+        <div className="flex gap-2">
+          <ChoiceButton label="🎻 instrumental" selected={!ownVocals} color={identity?.color} onSelect={() => { if (ownVocals) toggleVocals(); }} />
+          <ChoiceButton label="🎤 sung" selected={ownVocals} color={identity?.color} onSelect={() => { if (!ownVocals) toggleVocals(); }} />
+        </div>
+        <p className="mt-2 text-xs text-white/30">
+          {bothVocals
+            ? '🎤 you both want vocals — this song will sing'
+            : peerWantsVocals
+            ? `${peer?.glyph} wants vocals — pick 🎤 to agree`
+            : ownVocals
+            ? 'waiting for your co-rider to agree to vocals'
+            : 'songs stay instrumental unless you both pick 🎤'}
+        </p>
+      </Section>
 
       {/* Peer readiness */}
       {peerReady && (
@@ -243,16 +203,14 @@ export default function Compose() {
 
       {/* Let's drive */}
       <div className="fixed bottom-6 left-0 right-0 flex flex-col items-center gap-2 px-5">
-        {!allOwnChosen && missingItems.length > 0 && (
-          <p className="text-xs text-white/40">still need: {missingItems.join(', ')}</p>
-        )}
+        {!ownSeed && <p className="text-xs text-white/40">still need: a mood word</p>}
         <button
           onClick={goReady}
           disabled={isReady}
           className="w-full max-w-xs rounded-full py-4 text-lg font-semibold transition active:scale-95"
           style={{
-            background: allOwnChosen ? '#F5A623' : 'rgba(255,255,255,0.1)',
-            color: allOwnChosen ? '#000' : 'rgba(255,255,255,0.3)',
+            background: ownSeed ? '#F5A623' : 'rgba(255,255,255,0.1)',
+            color: ownSeed ? '#000' : 'rgba(255,255,255,0.3)',
           }}
         >
           {isReady ? 'waiting for co-rider…' : "Let's drive"}
@@ -289,13 +247,5 @@ function ChoiceButton({
     >
       {label}
     </button>
-  );
-}
-
-function PeerPick({ glyph, color, field: _field, value }: { glyph?: string; color?: string; field: string; value: string }) {
-  return (
-    <p className="mt-1 text-xs" style={{ color: color ?? '#1FB6C4' }}>
-      {glyph} picked <span className="font-semibold">{value}</span>
-    </p>
   );
 }

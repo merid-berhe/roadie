@@ -7,7 +7,7 @@ import type { CameraMode } from '../scene/RideScene';
 import PlayCanvasRideScene from '../scene/PlayCanvasRideScene';
 import ParisTiles, { PARIS_TILE_ANCHORS, type ParisAnchorId } from '../scene/ParisTiles';
 import type { RoadId } from '../scene/scenes';
-import type { GestureKind } from '@roadie/shared';
+import type { DanceMove, GestureKind } from '@roadie/shared';
 
 const ROAD_OPTIONS: RoadId[]     = ['desert', 'coast', 'mountain', 'city'];
 const GESTURE_OPTIONS: (GestureKind | null)[] = [null, 'wave', 'heart', 'headlights', 'tambourine', 'shaker', 'chime'];
@@ -25,10 +25,9 @@ const initialEngine: PreviewEngine = initialParams.get('engine') === 'r3f' ? 'r3
 const initialGesture = (GESTURE_OPTIONS as (string | null)[]).includes(initialParams.get('gesture'))
   ? (initialParams.get('gesture') as GestureKind)
   : null;
-// §5b verb-layer preview: ?seed=42&lane=0&lit=0,1
-const initialRideSeed = initialParams.has('seed') ? Number(initialParams.get('seed')) || 42 : null;
-const initialLane = Number(initialParams.get('lane') ?? 1) === 0 ? 0 : 1;
-const initialLit = (initialParams.get('lit') ?? '').split(',').filter(Boolean).map(Number);
+// §8d meeting preview: ?meeting=1&dance=bounce (both figures loop the move)
+const initialMeeting = initialParams.has('meeting');
+const initialDanceMove = initialParams.get('dance');
 
 export default function ScenePreview() {
   const [road, setRoad]               = useState<RoadId>(initialRoad);
@@ -47,6 +46,16 @@ export default function ScenePreview() {
     if (!fw) return;
     const id = setTimeout(() => setFirework({ synced: fw === 'synced' }), 3000);
     return () => clearTimeout(id);
+  }, []);
+
+  // ?dance=bounce — both preview figures loop the move (headless screenshot hook)
+  const [previewDance, setPreviewDance] = useState<{ move: DanceMove; at: number } | null>(null);
+  useEffect(() => {
+    if (!initialMeeting || !initialDanceMove) return;
+    const fire = () => setPreviewDance({ move: initialDanceMove as DanceMove, at: Date.now() });
+    fire();
+    const iv = setInterval(fire, 2500);
+    return () => clearInterval(iv);
   }, []);
   const [cameraMode, setCameraMode]   = useState<CameraMode>('interior');
   const [pixelRatio, setPixelRatio]   = useState(0.25);
@@ -99,10 +108,9 @@ export default function ScenePreview() {
               driverGestureKind={driverGesture}
               passengerGestureKind={passengerGesture}
               firework={firework}
-              rideSeed={initialRideSeed}
-              carLane={initialLane}
-              caughtIds={[]}
-              landmarksLit={initialLit}
+              mode={initialMeeting ? 'meeting' : 'ride'}
+              driverDance={previewDance}
+              passengerDance={previewDance}
             />
           : <RideScene
               road={road}

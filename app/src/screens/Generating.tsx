@@ -1,65 +1,124 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { DANCE_MOVES, type DanceMove } from '@roadie/shared';
+import type { RoadId } from '../scene/scenes';
+import type { DanceState } from '../scene/PlayCanvasRideScene';
 import { fadeBedIn, startBedSilent } from '../audio/bed';
+import { playFireworkAccent, playGestureSound } from '../audio/gestures';
 import { useRoom } from '../state/room';
+import { track } from '../lib/analytics';
 
-// "Tuning the radio" — the latency mask between composition and the ride (§1 step 4).
-// The bed fades in here; crossfade to the track fires from RideScreen when rideStart arrives.
+const PlayCanvasRideScene = lazy(() => import('../scene/PlayCanvasRideScene'));
+
+const MOVE_LABELS: Record<DanceMove, string> = {
+  bounce: '🦘 bounce',
+  spin: '🌀 spin',
+  wave: '👋 wave',
+  shimmy: '✨ shimmy',
+};
+
+// §8d The Meeting — the generation wait IS the place where the pair meets.
+// Parked car, ambient bed (whose beat WE control), a dance-off, and the
+// combined prompt on display like a record label being pressed.
 export default function Generating() {
   const riders = useRoom((s) => s.riders);
   const destination = useRoom((s) => s.destination);
+  const recipe = useRoom((s) => s.recipe);
+  const selectedRoad = useRoom((s) => s.selectedRoad) as RoadId;
+  const you = useRoom((s) => s.you);
+  const peerDance = useRoom((s) => s.peerDance);
+  const danceSynced = useRoom((s) => s.danceSynced);
+  const send = useRoom((s) => s.send);
+
+  const [ownDance, setOwnDance] = useState<DanceState>(null);
+  const lastDanceSentRef = useRef(0);
+  const prevDanceSyncedAt = useRef(0);
 
   useEffect(() => {
     startBedSilent(); // safe no-op if already started during compose
-    fadeBedIn(2);     // car pulls out — bed becomes audible
+    fadeBedIn(2);     // the studio hums — bed becomes audible
   }, []);
 
-  const driverGlyph = riders.find((r) => r.role === 'driver');
-  const passengerGlyph = riders.find((r) => r.role === 'passenger');
+  // synced dance — celebrate (burst handled by the scene)
+  useEffect(() => {
+    if (!danceSynced || danceSynced.at <= prevDanceSyncedAt.current) return;
+    prevDanceSyncedAt.current = danceSynced.at;
+    playFireworkAccent();
+    track('dance_synced', { move: danceSynced.move });
+  }, [danceSynced]);
+
+  function dance(move: DanceMove) {
+    const now = Date.now();
+    if (now - lastDanceSentRef.current < 600) return;
+    lastDanceSentRef.current = now;
+    setOwnDance({ move, at: now });
+    playGestureSound(move === 'shimmy' ? 'shaker' : move === 'spin' ? 'chime' : 'tambourine');
+    send({ t: 'dance', move });
+    track('dance_sent', { move });
+  }
+
+  const driver = riders.find((r) => r.role === 'driver');
+  const passenger = riders.find((r) => r.role === 'passenger');
+  const driverDance: DanceState = you === 'driver' ? ownDance : peerDance ? { move: peerDance.move, at: peerDance.at } : null;
+  const passengerDance: DanceState = you === 'passenger' ? ownDance : peerDance ? { move: peerDance.move, at: peerDance.at } : null;
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-[#0b1020] px-6 text-white">
-      {/* Rider glyphs */}
-      <div className="flex items-center gap-8">
-        {driverGlyph && (
-          <span className="text-5xl" style={{ color: driverGlyph.color }}>{driverGlyph.glyph}</span>
-        )}
-        {passengerGlyph && (
-          <span className="text-5xl" style={{ color: passengerGlyph.color }}>{passengerGlyph.glyph}</span>
-        )}
+    <div className="relative h-screen overflow-hidden bg-[#0b1020]">
+      <Suspense fallback={<div className="absolute inset-0 bg-[#0b1020]" />}>
+        <PlayCanvasRideScene
+          road={(destination?.theme ?? selectedRoad) as RoadId}
+          positionSec={0}
+          driverColor={driver?.color ?? '#F5A623'}
+          passengerColor={passenger?.color ?? '#1FB6C4'}
+          mode="meeting"
+          driverDance={driverDance}
+          passengerDance={passengerDance}
+          danceSyncedAt={danceSynced?.at ?? 0}
+        />
+      </Suspense>
+
+      {/* The record label — what you two asked for */}
+      <div className="pointer-events-none absolute left-0 right-0 top-4 flex flex-col items-center gap-1 px-6">
+        <p className="text-xs uppercase tracking-widest text-white/45">now pressing your song</p>
+        <div className="mt-1 max-w-md rounded-xl bg-black/45 px-4 py-3 text-center backdrop-blur-sm">
+          {recipe?.driver.text && (
+            <p className="text-sm" style={{ color: driver?.color }}>
+              {driver?.glyph} “{recipe.driver.text}”
+            </p>
+          )}
+          {recipe?.passenger.text && (
+            <p className="text-sm" style={{ color: passenger?.color }}>
+              {passenger?.glyph} “{recipe.passenger.text}”
+            </p>
+          )}
+          <p className="mt-1 text-xs text-white/50">
+            {recipe ? `${recipe.driver.seed} + ${recipe.passenger.seed}` : ''}
+            {recipe?.vocals ? ' · 🎤 sung' : ' · 🎻 instrumental'}
+            {destination ? ` · ${destination.name}` : ''}
+          </p>
+        </div>
       </div>
 
-      {/* Tuning animation */}
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex gap-1">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-8 w-1 rounded-full bg-amber-400"
-              style={{
-                animation: `pulse 1.2s ease-in-out ${i * 0.15}s infinite alternate`,
-                opacity: 0.4 + i * 0.12,
-              }}
-            />
+      {/* Dance-off controls */}
+      <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-6">
+        {danceSynced && Date.now() - danceSynced.at < 3000 && (
+          <p className="rounded-full bg-black/50 px-4 py-1.5 text-sm text-white/90">
+            ✨ synced {MOVE_LABELS[danceSynced.move]}!
+          </p>
+        )}
+        <div className="flex gap-2">
+          {DANCE_MOVES.map((move) => (
+            <button
+              key={move}
+              onClick={() => dance(move)}
+              className="rounded-full bg-white/10 px-4 py-2.5 text-sm text-white/85 backdrop-blur-sm transition active:scale-90"
+            >
+              {MOVE_LABELS[move]}
+            </button>
           ))}
         </div>
-        <p className="text-sm text-white/60">tuning your station…</p>
-        <p className="text-xs text-white/30">
-          {destination ? `${destination.name}, ${destination.country}` : 'your song is being made'}
-        </p>
+        <p className="text-xs text-white/35">match a move together for a spark · the song takes a minute or two</p>
+        <a href={location.pathname} className="text-xs text-white/20 hover:text-white/40">new ride</a>
       </div>
-      <a
-        href={location.pathname}
-        className="mt-8 text-xs text-white/20 underline-offset-2 hover:text-white/40"
-      >
-        new ride
-      </a>
-
-      <style>{`
-        @keyframes pulse {
-          from { transform: scaleY(0.4); }
-          to   { transform: scaleY(1.0); }
-        }
-      `}</style>
-    </main>
+    </div>
   );
 }

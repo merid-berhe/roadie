@@ -4,4 +4,3 @@ export * from './destinations';
 export * from './identity';
 export * from './messages';
 export * from './recipe';
-export * from './ride';

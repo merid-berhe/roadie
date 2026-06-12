@@ -7,6 +7,9 @@ import type { Destination } from './destinations';
 export type Role = 'driver' | 'passenger';
 export type Phase = 'lobby' | 'generating' | 'riding' | 'arrival';
 export type GestureKind = 'wave' | 'headlights' | 'heart' | 'tambourine' | 'shaker' | 'chime';
+export type DanceMove = 'bounce' | 'spin' | 'wave' | 'shimmy';
+
+export const DANCE_MOVES: DanceMove[] = ['bounce', 'spin', 'wave', 'shimmy'];
 
 export type Rider = {
   role: Role;
@@ -20,21 +23,19 @@ export type ClientMsg =
   | { t: 'join'; userId: string; glyph: string; color: string }
   | { t: 'seed'; word: string }
   | { t: 'road'; roadId: string }  // legacy scene debug control
-  | { t: 'choice'; field: string; value: string }
-  // §5a "tune the radio" — raw text goes ONLY to the room's LLM gate, never to the peer
-  | { t: 'whisper'; text: string }
+  // §5 v5.0 — free-text prompt; raw text goes ONLY to the room's gate, the peer
+  // sees the gated display text
+  | { t: 'prompt'; text: string }
+  | { t: 'vocals'; on: boolean }   // each rider votes; vocals only if BOTH say yes
   | { t: 'ready' }
   | { t: 'ping'; sentAt: number } // clock offset estimation (§9)
+  // --- the Meeting (generation wait, §8d) ---
+  | { t: 'dance'; move: DanceMove }
   // --- M5+ ---
   | { t: 'gesture'; kind: GestureKind }
   | { t: 'firework' }
   | { t: 'name'; word: string }
-  | { t: 'report' }
-  // --- §5b ride performance layer ---
-  | { t: 'lane'; lane: number }        // driver: nudge the car to lane 0|1
-  | { t: 'catch'; id: number }         // passenger: caught scheduled note `id`
-  | { t: 'riffTap'; idx: number }      // a tap inside riff `idx`'s window
-  | { t: 'flash'; idx: number };       // headlight flash at landmark `idx`
+  | { t: 'report' };
 
 /** Room → Client */
 export type RoomMsg =
@@ -48,27 +49,24 @@ export type RoomMsg =
       readyRoles: Role[];
       destination: Destination;
       recipe?: Recipe;
-      radioLocked?: boolean; // §5a/§16 — prompt frozen by pre-fire, whisper input closes
+      vocalsVotes: Role[];
     }
   | { t: 'roomFull' }
   | { t: 'peerChoice'; glyph: string; field: string; value: string }
-  // §5a — the minted style card (translated descriptor, never raw text); sent to both riders
-  | { t: 'whisperCard'; role: Role; glyph: string; style: string }
-  | { t: 'whisperRejected' } // sender only — gate said no (abuse/unusable)
+  // §5 v5.0 — the gated display text of a rider's prompt; sent to BOTH riders
+  | { t: 'promptCard'; role: Role; glyph: string; display: string }
+  | { t: 'promptRejected' } // sender only — gate said no (abuse/unusable)
   | { t: 'generationFailed'; reason: string }
   | { t: 'pong'; sentAt: number; serverTime: number }
   | { t: 'nameWord'; glyph: string; word: string }
   | { t: 'peerRoad'; roadId: string }  // legacy scene debug control
+  // --- the Meeting (§8d) ---
+  | { t: 'peerDance'; glyph: string; move: DanceMove }
+  | { t: 'danceSynced'; move: DanceMove } // both did the same move inside the window
   // --- M3+ ---
-  | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number; rideSeed: number }
+  | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }
   | { t: 'sync'; positionSec: number }
   | { t: 'peerGesture'; glyph: string; kind: GestureKind; atBeat?: number }
   | { t: 'fireworkSynced'; synced: boolean }
-  | { t: 'peerLeft' }
-  // --- §5b ride performance layer (all server-confirmed, sent to BOTH riders) ---
-  | { t: 'peerLane'; lane: number }
-  | { t: 'catchLanded'; id: number; byGlyph: string }
-  | { t: 'peerRiffTap'; idx: number; role: Role }
-  | { t: 'riffLanded'; idx: number }
-  | { t: 'landmarkLit'; idx: number };
+  | { t: 'peerLeft' };

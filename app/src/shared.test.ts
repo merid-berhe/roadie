@@ -3,10 +3,8 @@ import {
   DESTINATIONS,
   IDENTITY_PALETTE,
   buildPrompt,
-  buildRideSchedule,
   deriveIdentity,
   pickDestinationForRoom,
-  rideSeedFromRoom,
 } from '@roadie/shared';
 
 // Foundation test (§5 health check): proves the workspace import resolves and
@@ -27,68 +25,41 @@ describe('destinations', () => {
   it('picks a stable destination for a room code', () => {
     expect(pickDestinationForRoom('room-paris-1')).toEqual(pickDestinationForRoom('room-paris-1'));
   });
-
-  it('adds destination flavor to the generation prompt', () => {
-    const destination = DESTINATIONS[0];
-    const result = buildPrompt(
-      'midnight',
-      'wide-open',
-      { groove: 'cruising', tempo: 'medium', energy: 'steady' },
-      { lead_instrument: 'rhodes', brightness: 'warm', texture: 'lush' },
-      destination,
-    );
-
-    expect(result.prompt).toContain(destination.name);
-    expect(result.prompt).toContain(destination.promptFlavor);
-  });
-
-  it('weaves minted radio styles into the prompt and recipe (§5a)', () => {
-    const radio = { driver: 'early-70s warm soul, mellow electric piano', passenger: 'dusty desert blues' };
-    const result = buildPrompt(
-      'midnight',
-      'wide-open',
-      { groove: 'cruising', tempo: 'medium', energy: 'steady' },
-      { lead_instrument: 'rhodes', brightness: 'warm', texture: 'lush' },
-      DESTINATIONS[0],
-      radio,
-    );
-
-    expect(result.prompt).toContain(radio.driver);
-    expect(result.prompt).toContain(radio.passenger);
-    expect(result.prompt).toContain('no vocals'); // instrumental stays non-negotiable
-    expect(result.recipe.radio).toEqual(radio);
-  });
-
-  it('omits radio from prompt and recipe when no whispers were tuned', () => {
-    const result = buildPrompt(
-      'midnight',
-      'wide-open',
-      { groove: 'cruising', tempo: 'medium', energy: 'steady' },
-      { lead_instrument: 'rhodes', brightness: 'warm', texture: 'lush' },
-      DESTINATIONS[0],
-      {},
-    );
-
-    expect(result.recipe.radio).toBeUndefined();
-  });
 });
 
-describe('ride schedule (§5b)', () => {
-  it('is deterministic for the same seed', () => {
-    expect(buildRideSchedule(12345)).toEqual(buildRideSchedule(12345));
-    expect(rideSeedFromRoom('room-abc')).toEqual(rideSeedFromRoom('room-abc'));
+describe('buildPrompt (§5 v5.0 — prompt-first)', () => {
+  const destination = DESTINATIONS[0];
+
+  it('weaves both riders’ music texts, moods, and destination into the prompt', () => {
+    const result = buildPrompt('midnight', 'wide-open', destination, {
+      driverMusicText: 'early-70s warm soul with mellow electric piano',
+      passengerMusicText: 'dusty desert blues',
+      driverDisplayText: 'like bill withers',
+      passengerDisplayText: 'dusty desert blues',
+    });
+
+    expect(result.prompt).toContain('early-70s warm soul');
+    expect(result.prompt).toContain('dusty desert blues');
+    expect(result.prompt).toContain('midnight + wide-open mood');
+    expect(result.prompt).toContain(destination.name);
+    expect(result.prompt).toContain('no vocals'); // instrumental by default
+    // the recipe records the DISPLAY texts (what the riders saw), not the music-side swaps
+    expect(result.recipe.driver.text).toBe('like bill withers');
+    expect(result.recipe.vocals).toBe(false);
   });
 
-  it('keeps notes clear of riffs, landmarks, and the finale', () => {
-    const s = buildRideSchedule(rideSeedFromRoom('any-room'));
-    const blocked = [...s.riffs.map((r) => r.atSec), ...s.landmarks.map((l) => l.atSec)];
-    expect(s.notes.length).toBeGreaterThan(5);
-    expect(s.riffs).toHaveLength(2);
-    expect(s.landmarks).toHaveLength(2);
-    for (const n of s.notes) {
-      expect(n.atSec).toBeGreaterThanOrEqual(10);
-      expect(n.atSec).toBeLessThan(102); // finale stays clear
-      for (const b of blocked) expect(Math.abs(n.atSec - b)).toBeGreaterThan(6);
-    }
+  it('still builds a valid prompt when nobody typed anything', () => {
+    const result = buildPrompt('rainy', 'dreaming', destination, {});
+    expect(result.prompt).toContain('rainy + dreaming mood');
+    expect(result.prompt).toContain('instrumental');
+    expect(result.recipe.driver.text).toBeUndefined();
+  });
+
+  it('flips to vocals only when asked (both-opt-in is enforced server-side)', () => {
+    const result = buildPrompt('rainy', 'dreaming', destination, { vocals: true });
+    expect(result.vocals).toBe(true);
+    expect(result.prompt).toContain('with vocals');
+    expect(result.prompt).not.toContain('no vocals');
+    expect(result.recipe.vocals).toBe(true);
   });
 });

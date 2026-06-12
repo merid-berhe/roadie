@@ -4,8 +4,10 @@
 
 import { useEffect, useRef } from 'react';
 import * as pc from 'playcanvas';
-import { buildRideSchedule, LANE_X, type GestureKind } from '@roadie/shared';
+import type { DanceMove, GestureKind } from '@roadie/shared';
 import type { RoadId } from './scenes';
+
+export type DanceState = { move: DanceMove; at: number } | null;
 
 type Props = {
   road: RoadId;
@@ -15,13 +17,11 @@ type Props = {
   driverGestureKind?: GestureKind | null;
   passengerGestureKind?: GestureKind | null;
   firework?: { synced: boolean } | null;
-  // §5b ride performance layer (all optional — preview/legacy callers omit them)
-  rideSeed?: number | null;
-  carLane?: number;
-  caughtIds?: number[];
-  lastCatch?: { id: number; at: number } | null;
-  riffBloomAt?: number;
-  landmarksLit?: number[];
+  // §8d the Meeting — characters out of the car, dancing while the song presses
+  mode?: 'ride' | 'meeting';
+  driverDance?: DanceState;
+  passengerDance?: DanceState;
+  danceSyncedAt?: number;
 };
 
 const FAR = 234;          // world tile length (z)
@@ -123,12 +123,10 @@ export default function PlayCanvasRideScene({
   driverGestureKind,
   passengerGestureKind,
   firework,
-  rideSeed = null,
-  carLane = 1,
-  caughtIds,
-  lastCatch = null,
-  riffBloomAt = 0,
-  landmarksLit,
+  mode = 'ride',
+  driverDance = null,
+  passengerDance = null,
+  danceSyncedAt = 0,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const positionRef = useRef(positionSec);
@@ -137,11 +135,9 @@ export default function PlayCanvasRideScene({
   const driverGestureRef = useRef(driverGestureKind);
   const passengerGestureRef = useRef(passengerGestureKind);
   const fireworkRef = useRef(firework);
-  const carLaneRef = useRef(carLane);
-  const caughtIdsRef = useRef<number[]>(caughtIds ?? []);
-  const lastCatchRef = useRef(lastCatch);
-  const riffBloomAtRef = useRef(riffBloomAt);
-  const landmarksLitRef = useRef<number[]>(landmarksLit ?? []);
+  const driverDanceRef = useRef(driverDance);
+  const passengerDanceRef = useRef(passengerDance);
+  const danceSyncedAtRef = useRef(danceSyncedAt);
 
   useEffect(() => { positionRef.current = positionSec; }, [positionSec]);
   useEffect(() => { driverColorRef.current = driverColor; }, [driverColor]);
@@ -149,11 +145,9 @@ export default function PlayCanvasRideScene({
   useEffect(() => { driverGestureRef.current = driverGestureKind; }, [driverGestureKind]);
   useEffect(() => { passengerGestureRef.current = passengerGestureKind; }, [passengerGestureKind]);
   useEffect(() => { fireworkRef.current = firework; }, [firework]);
-  useEffect(() => { carLaneRef.current = carLane; }, [carLane]);
-  useEffect(() => { caughtIdsRef.current = caughtIds ?? []; }, [caughtIds]);
-  useEffect(() => { lastCatchRef.current = lastCatch; }, [lastCatch]);
-  useEffect(() => { riffBloomAtRef.current = riffBloomAt; }, [riffBloomAt]);
-  useEffect(() => { landmarksLitRef.current = landmarksLit ?? []; }, [landmarksLit]);
+  useEffect(() => { driverDanceRef.current = driverDance; }, [driverDance]);
+  useEffect(() => { passengerDanceRef.current = passengerDance; }, [passengerDance]);
+  useEffect(() => { danceSyncedAtRef.current = danceSyncedAt; }, [danceSyncedAt]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -244,11 +238,8 @@ export default function PlayCanvasRideScene({
     const heightAt = createTerrain(app, theme, road);
     createRoad(app, moving, theme);
     createThemeWorld(app, moving, drifters, bobbers, theme, road, heightAt);
-    const carRig = createCar(app, driverColorRef.current, passengerColorRef.current, gestures);
-    const verbs = rideSeed != null ? createVerbLayer(app, rideSeed, road) : null;
-    let lastCatchSeen = 0;
-    let lastBloomSeen = riffBloomAtRef.current;
-    let rigX = LANE_X[carLaneRef.current === 0 ? 0 : 1];
+    const { rig: carRig, figures } = createCar(app, driverColorRef.current, passengerColorRef.current, gestures, mode);
+    let lastDanceSyncSeen = danceSyncedAtRef.current;
 
     const resize = () => {
       const rect = mount.getBoundingClientRect();
@@ -307,51 +298,22 @@ export default function PlayCanvasRideScene({
         1.7 + sx * sx * 3.7 + (aspectK - 1) * 0.75,
         CAR_Z + Math.cos(yaw) * 5.8 * aspectK,
       );
-      camera.lookAt(rigX * 0.6, 0.45, CAR_Z);
-      // lane changes ease the whole rig sideways; bob/roll keep it alive
-      const laneTarget = LANE_X[carLaneRef.current === 0 ? 0 : 1];
-      rigX += (laneTarget - rigX) * Math.min(1, dt * 3.5);
-      carRig.setLocalPosition(rigX + Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
-      carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5 - (laneTarget - rigX) * 6);
-      carShadow?.setLocalPosition(rigX, ROAD_TOP + 0.006, CAR_Z);
+      camera.lookAt(0, 0.45, CAR_Z);
+      carRig.setLocalPosition(Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
+      carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
+      carShadow?.setLocalPosition(0, ROAD_TOP + 0.006, CAR_Z);
 
-      // §5b: notes, landmarks, catch sparkles, riff blooms
-      if (verbs) {
-        const pos = positionRef.current;
-        // notes are fireflies: they fly up the visible road from the horizon and
-        // meet the car at their scheduled beat (physically-fixed notes would
-        // approach from behind the front camera — no telegraph for the players)
-        for (const n of verbs.notes) {
-          const z = CAR_Z - (n.atSec - pos) * WORLD_SPEED;
-          const caught = caughtIdsRef.current.includes(n.id);
-          const visible = !caught && z > -BAND + 8 && z < 10;
-          n.entity.enabled = visible;
-          if (visible) {
-            // float above the roofline so the orb stays visible at the catch moment
-            n.entity.setLocalPosition(LANE_X[n.lane], 1.05 + Math.sin(elapsed * 2.5 + n.id) * 0.09, z);
-            n.entity.setLocalEulerAngles(0, elapsed * 50 + n.id * 40, 0);
-          }
-        }
-        for (const lm of verbs.landmarks) {
-          const z = CAR_Z + (lm.atSec - pos) * WORLD_SPEED;
-          const visible = z > -BAND - 20 && z < BAND + 20;
-          lm.entity.enabled = visible;
-          if (visible) lm.entity.setLocalPosition(0, 0, z);
-          if (!lm.lit && landmarksLitRef.current.includes(lm.idx)) {
-            lm.lit = true;
-            for (const part of lm.litParts) part.enabled = true;
-            spawnBurst(app, fireworks, new pc.Vec3(0, 2.8, z), [0xffd166, 0xffffff], 20, 1.4, 1.0, 0.08);
-          }
-        }
-        const lc = lastCatchRef.current;
-        if (lc && lc.at !== lastCatchSeen) {
-          lastCatchSeen = lc.at;
-          const note = verbs.notes.find((n) => n.id === lc.id);
-          spawnBurst(app, fireworks, new pc.Vec3(note ? LANE_X[note.lane] : rigX, 1.2, CAR_Z + 0.6), [0xffe9b0, 0xffd166, 0xffffff], 14, 0.9, 0.7, 0.06);
-        }
-        if (riffBloomAtRef.current > lastBloomSeen) {
-          lastBloomSeen = riffBloomAtRef.current;
-          spawnBurst(app, fireworks, new pc.Vec3(rigX, 2.2, CAR_Z), [colorToNumber(driverColorRef.current), colorToNumber(passengerColorRef.current), 0xffffff], 22, 1.3, 0.9, 0.07);
+      // §8d the Meeting: characters dance beside the parked car
+      if (mode === 'meeting' && figures) {
+        animateDancer(figures.driver, driverDanceRef.current, elapsed, 0);
+        animateDancer(figures.passenger, passengerDanceRef.current, elapsed, 2.1);
+        if (danceSyncedAtRef.current > lastDanceSyncSeen) {
+          lastDanceSyncSeen = danceSyncedAtRef.current;
+          spawnBurst(
+            app, fireworks, new pc.Vec3(0, 1.6, CAR_Z + 1.2),
+            [colorToNumber(driverColorRef.current), colorToNumber(passengerColorRef.current), 0xffffff, 0xffd166],
+            26, 1.4, 1.1, 0.07,
+          );
         }
       }
 
@@ -394,7 +356,7 @@ export default function PlayCanvasRideScene({
       app.destroy();
       canvas.remove();
     };
-  }, [road, rideSeed]);
+  }, [road, mode]);
 
   return <div ref={mountRef} className="absolute inset-0" />;
 }
@@ -956,25 +918,44 @@ function buildCity(app: pc.Application, rng: () => number, groupAt: GroupAt) {
 
 // ---------------------------------------------------------------- the hero car
 
+type DancerFig = { root: pc.Entity; hand: pc.Entity | null; baseX: number; baseY: number; baseZ: number };
+
 function createCar(
   app: pc.Application,
   driverColor: string,
   passengerColor: string,
   gestures: pc.Entity[],
-): pc.Entity {
+  mode: 'ride' | 'meeting',
+): { rig: pc.Entity; figures: { driver: DancerFig; passenger: DancerFig } | null } {
   const rig = new pc.Entity('car-rig');
   rig.setLocalPosition(0, 0, CAR_Z);
   app.root.addChild(rig);
 
-  // occupants are placed synchronously so they exist even while the GLB streams in.
-  // they face +z (toward the camera); car cabin sits just behind the car's centre.
-  // the model is LHD — wheel on the car's left, the viewer's right from the front
-  const driver = createOccupant(rig, 'driver', [0, 0, 0], driverColor, gestures, 'man');
-  driver.setLocalPosition(0.3, 0.28, 0.18);
-  driver.setLocalEulerAngles(0, 180, 0);
-  const passenger = createOccupant(rig, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman');
-  passenger.setLocalPosition(-0.3, 0.28, 0.18);
-  passenger.setLocalEulerAngles(0, 180, 0);
+  let figures: { driver: DancerFig; passenger: DancerFig } | null = null;
+  if (mode === 'ride') {
+    // occupants are placed synchronously so they exist even while the GLB streams in.
+    // they face +z (toward the camera); car cabin sits just behind the car's centre.
+    // the model is LHD — wheel on the car's left, the viewer's right from the front
+    const driver = createOccupant(rig, 'driver', [0, 0, 0], driverColor, gestures, 'man', 'seated');
+    driver.setLocalPosition(0.3, 0.28, 0.18);
+    driver.setLocalEulerAngles(0, 180, 0);
+    const passenger = createOccupant(rig, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman', 'seated');
+    passenger.setLocalPosition(-0.3, 0.28, 0.18);
+    passenger.setLocalEulerAngles(0, 180, 0);
+  } else {
+    // §8d the Meeting: both riders stand beside the parked car, facing the camera
+    const standY = ROAD_TOP + 0.57; // legs reach the road surface
+    const driver = createOccupant(app.root as pc.Entity, 'driver', [0, 0, 0], driverColor, gestures, 'man', 'standing');
+    driver.setLocalPosition(1.5, standY, CAR_Z + 0.9);
+    driver.setLocalEulerAngles(0, 180, 0);
+    const passenger = createOccupant(app.root as pc.Entity, 'passenger', [0, 0, 0], passengerColor, gestures, 'woman', 'standing');
+    passenger.setLocalPosition(-1.5, standY, CAR_Z + 0.9);
+    passenger.setLocalEulerAngles(0, 180, 0);
+    figures = {
+      driver: { root: driver, hand: driver.findByName('driver-gesture') as pc.Entity | null, baseX: 1.5, baseY: standY, baseZ: CAR_Z + 0.9 },
+      passenger: { root: passenger, hand: passenger.findByName('passenger-gesture') as pc.Entity | null, baseX: -1.5, baseY: standY, baseZ: CAR_Z + 0.9 },
+    };
+  }
 
   // soft fake contact shadow (static — doesn't bob with the rig)
   const shadowM = new pc.StandardMaterial();
@@ -1023,7 +1004,46 @@ function createCar(
   app.assets.add(asset);
   app.assets.load(asset);
 
-  return rig;
+  return { rig, figures };
+}
+
+// §8d — procedural dance: short move animations over a gentle idle bob
+const DANCE_DUR_SEC = 1.6;
+
+function animateDancer(fig: DancerFig, dance: DanceState, elapsed: number, phase: number): void {
+  let x = fig.baseX;
+  let y = fig.baseY + Math.sin(elapsed * 1.9 + phase) * 0.03; // idle bob
+  let rotY = 180;
+  let rotZ = Math.sin(elapsed * 1.4 + phase) * 2;             // idle sway
+  let waving = false;
+
+  if (dance) {
+    const t = (Date.now() - dance.at) / 1000 / DANCE_DUR_SEC;
+    if (t >= 0 && t <= 1) {
+      switch (dance.move) {
+        case 'bounce':
+          y = fig.baseY + Math.abs(Math.sin(t * Math.PI * 3)) * 0.26;
+          break;
+        case 'spin':
+          rotY = 180 + 360 * (1 - Math.pow(1 - t, 3));
+          y = fig.baseY + Math.sin(t * Math.PI) * 0.1;
+          break;
+        case 'wave':
+          rotZ = Math.sin(t * Math.PI * 4) * 12;
+          y = fig.baseY + Math.sin(t * Math.PI * 2) * 0.05;
+          waving = true;
+          break;
+        case 'shimmy':
+          rotZ = Math.sin(t * Math.PI * 6) * 9;
+          x = fig.baseX + Math.sin(t * Math.PI * 6) * 0.09;
+          break;
+      }
+    }
+  }
+
+  fig.root.setLocalPosition(x, y, fig.baseZ);
+  fig.root.setLocalEulerAngles(0, rotY, rotZ);
+  if (fig.hand) fig.hand.enabled = waving;
 }
 
 // Human silhouettes seen from the back seat. The rider's glyph colour lives in
@@ -1035,6 +1055,7 @@ function createOccupant(
   colorHex: string,
   gestures: pc.Entity[],
   variant: 'man' | 'woman',
+  pose: 'seated' | 'standing' = 'seated',
 ): pc.Entity {
   const clothes = mat(colorToNumber(colorHex), 0.2);
   const skin = mat(variant === 'man' ? 0xc08a5e : 0xd2a072, 0.08);
@@ -1046,6 +1067,12 @@ function createOccupant(
   parent.addChild(figure);
 
   const torsoW = variant === 'man' ? 0.34 : 0.29;
+  if (pose === 'standing') {
+    // legs reach the ground (§8d meeting); origin stays at the torso centre
+    const trousers = mat(0x2a2c36, 0.04);
+    child(figure, 'box', [-0.08, -0.36, 0], [0.11, 0.42, 0.13], trousers);
+    child(figure, 'box', [0.08, -0.36, 0], [0.11, 0.42, 0.13], trousers);
+  }
   // torso + rounded shoulders + slim upper arms
   child(figure, 'box', [0, 0.02, 0], [torsoW, 0.26, 0.15], clothes);
   child(figure, 'sphere', [-torsoW / 2 + 0.01, 0.13, 0], [0.09, 0.08, 0.09], clothes);
@@ -1128,99 +1155,6 @@ function spawnBurst(
       life,
     });
   }
-}
-
-// ---------------------------------------------------------------- §5b verb layer
-
-type VerbLayer = {
-  notes: { id: number; atSec: number; lane: 0 | 1; entity: pc.Entity }[];
-  landmarks: { idx: number; atSec: number; entity: pc.Entity; litParts: pc.Entity[]; lit: boolean }[];
-};
-
-function createVerbLayer(app: pc.Application, rideSeed: number, road: RoadId): VerbLayer {
-  const schedule = buildRideSchedule(rideSeed);
-
-  const orbMat = unlitMat(0xffefc0);
-  const notes = schedule.notes.map((n) => {
-    const g = new pc.Entity(`note-${n.id}`);
-    const core = primitive('core', 'sphere', [0, 0.1, 0], [0.3, 0.34, 0.3], orbMat);
-    g.addChild(core);
-    const halo = primitive('halo', 'sphere', [0, 0.1, 0], [0.85, 0.9, 0.85], glowMat(0xffd166, 0.3));
-    g.addChild(halo);
-    const stem = primitive('stem', 'box', [0.11, 0.42, 0], [0.045, 0.36, 0.045], orbMat);
-    g.addChild(stem); // crude eighth-note silhouette
-    g.enabled = false;
-    app.root.addChild(g);
-    return { ...n, entity: g };
-  });
-
-  const landmarks = schedule.landmarks.map((l) => {
-    const { entity, litParts } = createLandmark(road);
-    entity.enabled = false;
-    app.root.addChild(entity);
-    return { idx: l.idx, atSec: l.atSec, entity, litParts, lit: false };
-  });
-
-  return { notes, landmarks };
-}
-
-// per-theme landmark; litParts start disabled and glow on when both riders flash
-function createLandmark(road: RoadId): { entity: pc.Entity; litParts: pc.Entity[] } {
-  const g = new pc.Entity('landmark');
-  const litParts: pc.Entity[] = [];
-  const warmGlow = (pos: V3, scale: V3, opacity = 0.5) => {
-    const p = primitive('lit', 'sphere', pos, scale, glowMat(0xffc97a, opacity));
-    p.enabled = false;
-    g.addChild(p);
-    litParts.push(p);
-    return p;
-  };
-
-  if (road === 'desert') {
-    // route arch over the road
-    const m = mat(0x8a4a30, 0.04);
-    child(g, 'box', [-2.1, 0.9, 0], [0.3, 3.0, 0.3], m);
-    child(g, 'box', [2.1, 0.9, 0], [0.3, 3.0, 0.3], m);
-    child(g, 'box', [0, 2.5, 0], [4.8, 0.35, 0.3], m);
-    child(g, 'box', [0, 2.5, 0.02], [2.2, 0.22, 0.28], mat(0xe8dcc0, 0.15));
-    warmGlow([-2.1, 2.75, 0], [0.3, 0.3, 0.3]);
-    warmGlow([2.1, 2.75, 0], [0.3, 0.3, 0.3]);
-    warmGlow([0, 2.5, 0], [4.4, 0.5, 0.5], 0.18);
-  } else if (road === 'coast') {
-    // lighthouse just off the road
-    const white = mat(0xf2efe6, 0.1);
-    const red = mat(0xc4503c, 0.08);
-    child(g, 'cylinder', [4.6, 1.2, 0], [0.95, 3.8, 0.95], white);
-    child(g, 'cylinder', [4.6, 1.0, 0], [0.97, 0.5, 0.97], red);
-    child(g, 'cylinder', [4.6, 2.2, 0], [0.97, 0.5, 0.97], red);
-    child(g, 'cylinder', [4.6, 3.25, 0], [0.6, 0.4, 0.6], mat(0x2a2c38, 0));
-    child(g, 'cone', [4.6, 3.65, 0], [0.7, 0.5, 0.7], red);
-    warmGlow([4.6, 3.3, 0], [0.45, 0.4, 0.45], 0.9);
-    warmGlow([4.6, 3.3, 0], [1.6, 1.3, 1.6], 0.18);
-  } else if (road === 'mountain') {
-    // stone gate with lanterns
-    const stone = mat(0x8b97a0, 0);
-    child(g, 'box', [-2.2, 0.5, 0], [0.7, 2.2, 0.7], stone);
-    child(g, 'box', [2.2, 0.5, 0], [0.7, 2.2, 0.7], stone);
-    child(g, 'box', [0, 1.8, 0], [5.2, 0.4, 0.6], stone);
-    child(g, 'sphere', [-2.2, 1.85, 0], [0.34, 0.3, 0.34], mat(0x4a4540, 0));
-    child(g, 'sphere', [2.2, 1.85, 0], [0.34, 0.3, 0.34], mat(0x4a4540, 0));
-    warmGlow([-2.2, 1.85, 0], [0.4, 0.36, 0.4], 0.7);
-    warmGlow([2.2, 1.85, 0], [0.4, 0.36, 0.4], 0.7);
-  } else {
-    // grand torii spanning the road
-    const verm = mat(0xc23b22, 0.12);
-    child(g, 'cylinder', [-2.3, 1.3, 0], [0.34, 3.4, 0.34], verm);
-    child(g, 'cylinder', [2.3, 1.3, 0], [0.34, 3.4, 0.34], verm);
-    child(g, 'box', [0, 3.1, 0], [5.9, 0.34, 0.45], verm);
-    child(g, 'box', [0, 2.55, 0], [5.0, 0.22, 0.3], verm);
-    child(g, 'box', [0, 3.38, 0], [6.3, 0.16, 0.5], mat(0x1d2130, 0));
-    warmGlow([-1.2, 2.3, 0], [0.3, 0.36, 0.3], 0.8);
-    warmGlow([1.2, 2.3, 0], [0.3, 0.36, 0.3], 0.8);
-    warmGlow([0, 2.8, 0], [4.6, 1.2, 1.2], 0.12);
-  }
-
-  return { entity: g, litParts };
 }
 
 // ---------------------------------------------------------------- mesh builder (flat-shaded, vertex-colored)

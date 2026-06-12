@@ -4,6 +4,7 @@ export interface MusicGeneratorInput {
   prompt: string;
   bpm: number;
   durationSec: number;
+  vocals?: boolean; // §12 v5.0 — only true when BOTH riders opted in
 }
 
 export interface MusicGeneratorOutput {
@@ -32,7 +33,7 @@ export class FalMiniMaxGenerator implements MusicGenerator {
       headers: { Authorization: `Key ${this.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: input.prompt,
-        is_instrumental: true,
+        is_instrumental: input.vocals !== true,
         audio_setting: { format: 'mp3', sample_rate: 44100, bitrate: 128000 },
       }),
     });

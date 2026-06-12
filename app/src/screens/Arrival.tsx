@@ -95,15 +95,15 @@ export default function Arrival({ onDone }: Props) {
 
       {/* Attribution — §5: "we made this together" legible after the fact */}
       {recipe && (
-        <div className="flex flex-col gap-1 text-sm">
+        <div className="flex flex-col gap-1 text-center text-sm">
           {driver && (
             <p style={{ color: driver.color }}>
-              {driver.glyph} brought the {recipe.driver.groove} groove
+              {driver.glyph} {recipe.driver.text ? `“${recipe.driver.text}”` : `brought the ${recipe.driver.seed} mood`}
             </p>
           )}
           {passenger && (
             <p style={{ color: passenger.color }}>
-              {passenger.glyph} brought the {recipe.passenger.lead_instrument}
+              {passenger.glyph} {recipe.passenger.text ? `“${recipe.passenger.text}”` : `brought the ${recipe.passenger.seed} mood`}
             </p>
           )}
         </div>
