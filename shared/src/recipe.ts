@@ -34,7 +34,8 @@ export type Recipe = {
   driver: { seed: string; text?: string };
   passenger: { seed: string; text?: string };
   vocals: boolean;
-  brief?: string; // §5a producer pass — the fused, coherence-enforced direction
+  brief?: string;  // §5a producer pass — the fused, coherence-enforced direction
+  lyrics?: string; // v5.2 — producer-written words (vocal rides only)
 };
 
 /** Server-side, deterministic — §5. durationSec is 120 (2-min ride, decision 2026-06-05).

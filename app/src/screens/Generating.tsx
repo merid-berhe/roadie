@@ -100,6 +100,12 @@ export default function Generating() {
               the studio hears: {recipe.brief}
             </p>
           )}
+          {recipe?.lyrics && (
+            <p className="mt-2 whitespace-pre-line border-t border-white/10 pt-2 text-xs italic leading-5 text-white/55">
+              {recipe.lyrics.split('\n').slice(0, 4).join('\n')}
+              {recipe.lyrics.split('\n').length > 4 ? '\n…' : ''}
+            </p>
+          )}
         </div>
       </div>
 

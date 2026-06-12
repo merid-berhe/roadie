@@ -25,6 +25,9 @@ export interface PromptGate {
   /** The producer pass (v5.1): fuse everything into ONE coherent, listenable
    * brief — the alignment layer between two players' clashing prompts. */
   fuse(input: FuseInput): Promise<string | null>;
+  /** v5.2: MiniMax requires lyrics text when is_instrumental=false — the
+   * producer writes them from the fused brief. */
+  lyrics(input: { brief: string; moods: [string, string]; destinationName?: string }): Promise<string | null>;
 }
 
 const SYSTEM_PROMPT = `You are a content gate for a cozy two-player music game where players type a short prompt (up to 100 characters) describing the song they want to make together. You do NOT rewrite their creative intent.
@@ -41,6 +44,14 @@ Rules:
 - The result must read like a track a person would enjoy on a drive — coherent and musical above all.
 - No artist, band, or song names. Plain descriptive English. Maximum 220 characters.
 - Output ONLY the brief text, no quotes, no preamble.`;
+
+const LYRICS_SYSTEM_PROMPT = `You write song lyrics for a cozy two-player road-trip game. Given a musical brief, write the lyrics for a ~2 minute song.
+Rules:
+- Two short verses and a short chorus that repeats once: roughly 8–12 short lines total, MAXIMUM 480 characters.
+- One line per lyric line, separated by newlines. No section labels, no brackets, no quotes.
+- Warm, evocative, singable. Match the brief's mood and any place it mentions. If the brief implies a non-English language, write in it.
+- No artist names, no profanity, no personal names.
+- Output ONLY the lyrics.`;
 
 // ---------------------------------------------------------------------------
 // fal.ai any-llm — reuses the existing FAL_KEY, ~$0.001/call, gpt-4o-mini tier
@@ -110,6 +121,29 @@ export class FalLlmGate implements PromptGate {
       clearTimeout(timer);
     }
   }
+
+  async lyrics(input: { brief: string; moods: [string, string]; destinationName?: string }): Promise<string | null> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      const res = await fetch(this.base, {
+        method: 'POST',
+        headers: { Authorization: `Key ${this.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'openai/gpt-4o-mini',
+          system_prompt: LYRICS_SYSTEM_PROMPT,
+          prompt: `Brief: ${input.brief}\nMoods: ${input.moods[0]} + ${input.moods[1]}.${input.destinationName ? ` Place: ${input.destinationName}.` : ''}`,
+        }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`fal any-llm ${res.status}: ${await res.text()}`);
+      const data = (await res.json()) as { output?: string };
+      const lyrics = data.output?.trim().replace(/^["'\s]+|["'\s]+$/g, '');
+      return lyrics ? lyrics.slice(0, 590) : null; // MiniMax lyrics cap ~600 chars
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -130,5 +164,10 @@ export class MockPromptGate implements PromptGate {
     await new Promise<void>((r) => setTimeout(r, 300));
     const bits = [input.driverText, input.passengerText].filter(Boolean).join(' meets ');
     return bits ? `${bits}, fused into one ${input.moods[0]} groove (mock brief)` : null;
+  }
+
+  async lyrics(input: { brief: string; moods: [string, string]; destinationName?: string }): Promise<string | null> {
+    await new Promise<void>((r) => setTimeout(r, 200));
+    return `mock verse about the ${input.moods[0]} road\nmock chorus we sing together\n(mock lyrics for: ${input.brief.slice(0, 40)})`;
   }
 }

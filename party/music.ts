@@ -5,6 +5,7 @@ export interface MusicGeneratorInput {
   bpm: number;
   durationSec: number;
   vocals?: boolean; // §12 v5.0 — only true when BOTH riders opted in
+  lyrics?: string;  // v5.2 — REQUIRED by MiniMax when vocals=true (422 otherwise)
 }
 
 export interface MusicGeneratorOutput {
@@ -33,7 +34,10 @@ export class FalMiniMaxGenerator implements MusicGenerator {
       headers: { Authorization: `Key ${this.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: input.prompt,
-        is_instrumental: input.vocals !== true,
+        // vocal mode requires non-empty lyrics (fal 422 otherwise); the server
+        // guarantees lyrics are present whenever vocals=true
+        is_instrumental: input.vocals !== true || !input.lyrics,
+        ...(input.vocals === true && input.lyrics ? { lyrics: input.lyrics, lyrics_optimizer: true } : {}),
         audio_setting: { format: 'mp3', sample_rate: 44100, bitrate: 128000 },
       }),
     });

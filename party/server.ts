@@ -37,6 +37,7 @@ export default class RideRoom implements Party.Server {
   // Generation (M3)
   private audioUrl: string | null = null;
   private rideStartAt: number | null = null;
+  private lyricsText: string | null = null; // v5.2 — required by MiniMax for vocal rides
   private readonly generator: MusicGenerator;
 
   // Clock sync (M4) — §9
@@ -236,7 +237,34 @@ export default class RideRoom implements Party.Server {
           console.error('[room] fuse_failed (falling back to raw join):', err);
         }
       }
-      await this.runGeneration(this.generationInput!);
+
+      // v5.2: MiniMax vocal mode 422s without lyrics — the producer writes them.
+      // If lyric-writing fails, the ride falls back to instrumental (a song
+      // always generates).
+      if (vocals && this.phase === 'generating') {
+        try {
+          const lyr = await this.gate.lyrics({
+            brief: this.generationInput!.recipe.brief ?? this.generationInput!.prompt,
+            moods: [seedDriver, seedPassenger],
+            destinationName: this.destination.name,
+          });
+          if (!lyr) throw new Error('empty lyrics');
+          this.lyricsText = lyr;
+          this.generationInput!.recipe.lyrics = lyr;
+          console.log(`[room] lyrics_written chars=${lyr.length}`);
+          this.broadcastState(); // words show on the Meeting label
+        } catch (err) {
+          console.error('[room] lyrics_failed — falling back to instrumental:', err);
+          this.generationInput = buildPrompt(seedDriver, seedPassenger, this.destination, {
+            ...opts,
+            fusedBrief: this.generationInput!.recipe.brief,
+            vocals: false,
+          });
+          this.broadcastState();
+        }
+      }
+
+      await this.runGeneration({ ...this.generationInput!, lyrics: this.lyricsText ?? undefined });
     })().catch((err: unknown) => console.error('[room] runGeneration unexpected error:', err));
   }
 
