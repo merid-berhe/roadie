@@ -1,12 +1,13 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { getPalette } from '../scene/palette';
 import type { RoadId } from '../scene/scenes';
-import { getActualPositionSec, nudgePlayback } from '../audio/player';
+import { getActualPositionSec, getTrackDurationSec, nudgePlayback } from '../audio/player';
 import { characterName } from '../components/CharacterFace';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
-const RIDE_DURATION_SEC = 120;
+const FALLBACK_DURATION_SEC = 120;
+const FINALE_SEC = 12; // the last stretch of the song: pull over, get out, celebrate
 const PixiSceneCanvas = lazy(() => import('../scene/SceneCanvas'));
 const PlayCanvasRideScene = lazy(() => import('../scene/PlayCanvasRideScene'));
 
@@ -22,6 +23,8 @@ export default function Riding() {
   const syncPositionSec = useRoom((s) => s.syncPositionSec);
   const selectedRoad    = useRoom((s) => s.selectedRoad) as RoadId;
   const destination     = useRoom((s) => s.destination);
+  const trackDurationSec = useRoom((s) => s.trackDurationSec);
+  const send = useRoom((s) => s.send);
 
   const [positionSec, setPositionSec] = useState(0);
 
@@ -50,6 +53,22 @@ export default function Riding() {
     if (actual != null && Math.abs(actual - syncPositionSec) > 0.25) nudgePlayback(actual - syncPositionSec);
   }, [syncPositionSec]);
 
+  // v5.8: report the decoded track's REAL duration once — the room re-times
+  // arrival so the ride ends with the song, not a hard-coded 120s
+  const durationSentRef = useRef(false);
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (durationSentRef.current) { clearInterval(iv); return; }
+      const dur = getTrackDurationSec();
+      if (dur != null) {
+        durationSentRef.current = true;
+        send({ t: 'trackDuration', sec: Math.round(dur * 10) / 10 });
+        clearInterval(iv);
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [send]);
+
   const driver   = riders.find((r) => r.role === 'driver');
   const passenger = riders.find((r) => r.role === 'passenger');
   const youRider = riders.find((r) => r.glyph === identity?.glyph);
@@ -59,7 +78,10 @@ export default function Riding() {
     (destination?.theme ?? selectedRoad) as string
   ];
   const palette  = getPalette(themeWord, themeWord);
-  const progress = Math.min(1, positionSec / RIDE_DURATION_SEC);
+  const rideDuration = trackDurationSec ?? getTrackDurationSec() ?? FALLBACK_DURATION_SEC;
+  const progress = Math.min(1, positionSec / rideDuration);
+  const finaleStartSec = Math.max(10, rideDuration - FINALE_SEC);
+  const inFinale = positionSec >= finaleStartSec;
   const rideRoad = (destination?.theme ?? selectedRoad) as RoadId;
 
   const sceneEngine = new URLSearchParams(window.location.search).get('engine');
@@ -93,8 +115,16 @@ export default function Riding() {
             passengerColor={passenger?.color ?? '#1FB6C4'}
             driverCharacter={driver?.character}
             passengerCharacter={passenger?.character}
+            finaleStartSec={finaleStartSec}
           />
         </Suspense>
+      )}
+
+      {/* §5c finale caption */}
+      {inFinale && (
+        <p className="pointer-events-none absolute left-0 right-0 top-8 text-center text-sm text-white/75">
+          🏁 you made it — that's your song
+        </p>
       )}
 
       {/* HUD */}

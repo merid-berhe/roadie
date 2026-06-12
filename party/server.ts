@@ -40,6 +40,8 @@ export default class RideRoom implements Party.Server {
   private audioUrl: string | null = null;
   private rideStartAt: number | null = null;
   private lyricsText: string | null = null; // v5.2 — required by MiniMax for vocal rides
+  private trackDurationSec: number | null = null; // v5.8 — client-measured real length
+  private arrivalTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly generator: MusicGenerator;
 
   // Clock sync (M4) — §9
@@ -74,6 +76,7 @@ export default class RideRoom implements Party.Server {
       case 'vocals':  return this.handleVocals(msg, sender);
       case 'ready':   return this.handleReady(sender);
       case 'ping':    return this.handlePing(msg, sender);
+      case 'trackDuration': return this.handleTrackDuration(msg);
       case 'dance':   return this.handleDance(msg, sender);
       case 'gesture': return this.handleGesture(msg, sender);
       case 'firework':return this.handleFirework(sender);
@@ -385,13 +388,31 @@ export default class RideRoom implements Party.Server {
   }
 
   private scheduleArrival(): void {
-    // Advance to arrival after the ride duration (120s = §5 durationSec)
-    setTimeout(() => {
+    // provisional 120s; re-timed when a client reports the track's real length (v5.8)
+    this.scheduleArrivalIn(120_000);
+  }
+
+  private scheduleArrivalIn(ms: number): void {
+    if (this.arrivalTimer) clearTimeout(this.arrivalTimer);
+    this.arrivalTimer = setTimeout(() => {
       if (this.phase !== 'riding') return;
       this.phase = 'arrival';
       if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; }
       this.broadcastState();
-    }, 120_000);
+    }, Math.max(1_000, ms));
+  }
+
+  // v5.8 — the ride ends when the SONG ends: first sane client report wins,
+  // arrival lands shortly after the final note (the finale plays out on top)
+  private handleTrackDuration(msg: Extract<ClientMsg, { t: 'trackDuration' }>): void {
+    if (this.phase !== 'riding' || !this.rideStartAt) return;
+    if (this.trackDurationSec != null) return; // first report wins (same file both sides)
+    const sec = Number(msg.sec);
+    if (!Number.isFinite(sec) || sec < 30 || sec > 300) return;
+    this.trackDurationSec = sec;
+    console.log(`[room] track_duration_sec=${Math.round(sec)} — arrival re-timed`);
+    this.broadcastAll({ t: 'trackDuration', sec });
+    this.scheduleArrivalIn(this.rideStartAt + (sec + 1.5) * 1000 - Date.now());
   }
 
   private handleRoad(msg: Extract<ClientMsg, { t: 'road' }>, sender: Party.Connection): void {
@@ -454,6 +475,12 @@ export default class RideRoom implements Party.Server {
   private broadcastToPeer(senderConnId: string, msg: RoomMsg): void {
     for (const connId of this.participants.keys()) {
       if (connId !== senderConnId) this.room.getConnection(connId)?.send(JSON.stringify(msg));
+    }
+  }
+
+  private broadcastAll(msg: RoomMsg): void {
+    for (const connId of this.participants.keys()) {
+      this.room.getConnection(connId)?.send(JSON.stringify(msg));
     }
   }
 

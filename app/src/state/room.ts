@@ -27,6 +27,7 @@ type RoomState = {
   audioUrl: string | null;
   rideStartAt: number | null; // server-authoritative timestamp (ms)
   bpm: number | null;
+  trackDurationSec: number | null; // v5.8 — the song's real length (server-confirmed)
   generationFailed: boolean;
   generationFailedReason: string | null;
   // Clock sync (M4, §9)
@@ -70,6 +71,7 @@ const initial = {
   audioUrl: null as string | null,
   rideStartAt: null as number | null,
   bpm: null as number | null,
+  trackDurationSec: null as number | null,
   generationFailed: false,
   generationFailedReason: null as string | null,
   clockOffset: 0,
@@ -127,6 +129,8 @@ export const useRoom = create<RoomState>((set) => ({
           const clockOffset = (state.clockOffset * state.clockSamples + sample) / n;
           return { clockOffset, clockSamples: n };
         }
+        case 'trackDuration':
+          return { trackDurationSec: msg.sec };
         case 'sync':
           return { syncPositionSec: msg.positionSec };
         case 'peerGesture':

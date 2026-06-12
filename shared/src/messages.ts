@@ -30,6 +30,9 @@ export type ClientMsg =
   | { t: 'vocals'; on: boolean }   // each rider votes; vocals only if BOTH say yes
   | { t: 'ready' }
   | { t: 'ping'; sentAt: number } // clock offset estimation (§9)
+  // v5.8 — the client decodes the audio and reports its REAL length; the room
+  // re-times arrival to the song's true end (MiniMax ignores durationSec)
+  | { t: 'trackDuration'; sec: number }
   // --- the Meeting (generation wait, §8d) ---
   | { t: 'dance'; move: DanceMove }
   // --- M5+ ---
@@ -67,6 +70,7 @@ export type RoomMsg =
   // --- M3+ ---
   | { t: 'rideStart'; audioUrl: string; source: 'own' | 'borrowed'; rideStartAt: number; bpm: number }
   | { t: 'trackReady'; audioUrl: string; bpm: number }
+  | { t: 'trackDuration'; sec: number } // v5.8 — confirmed real length, to both riders
   | { t: 'sync'; positionSec: number }
   | { t: 'peerGesture'; glyph: string; kind: GestureKind; atBeat?: number }
   | { t: 'fireworkSynced'; synced: boolean }

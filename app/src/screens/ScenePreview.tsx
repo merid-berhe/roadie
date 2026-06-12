@@ -31,6 +31,8 @@ const initialMeeting = initialParams.has('meeting');
 const initialDanceMove = initialParams.get('dance');
 const initialDriverChar = initialParams.get('dc') ?? 'moss';
 const initialPassengerChar = initialParams.get('pc') ?? 'juno';
+// §5c finale preview: ?finale=5&t=12 → world stopped, pair out celebrating
+const initialFinaleStart = initialParams.has('finale') ? Number(initialParams.get('finale')) || 8 : null;
 
 export default function ScenePreview() {
   const [road, setRoad]               = useState<RoadId>(initialRoad);
@@ -116,6 +118,7 @@ export default function ScenePreview() {
               mode={initialMeeting ? 'meeting' : 'ride'}
               driverDance={previewDance}
               passengerDance={previewDance}
+              finaleStartSec={initialFinaleStart}
             />
           : <RideScene
               road={road}

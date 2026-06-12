@@ -33,6 +33,9 @@ type Props = {
   driverDance?: DanceState;
   passengerDance?: DanceState;
   danceSyncedAt?: number;
+  // §5c the Finale (v5.8) — at this position the car pulls over and the pair
+  // hops out to celebrate while the song's last seconds play
+  finaleStartSec?: number | null;
 };
 
 const FAR = 234;          // world tile length (z)
@@ -144,6 +147,7 @@ export default function PlayCanvasRideScene({
   driverDance = null,
   passengerDance = null,
   danceSyncedAt = 0,
+  finaleStartSec = null,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const positionRef = useRef(positionSec);
@@ -155,6 +159,7 @@ export default function PlayCanvasRideScene({
   const driverDanceRef = useRef(driverDance);
   const passengerDanceRef = useRef(passengerDance);
   const danceSyncedAtRef = useRef(danceSyncedAt);
+  const finaleStartRef = useRef(finaleStartSec);
 
   useEffect(() => { positionRef.current = positionSec; }, [positionSec]);
   useEffect(() => { driverColorRef.current = driverColor; }, [driverColor]);
@@ -165,6 +170,7 @@ export default function PlayCanvasRideScene({
   useEffect(() => { driverDanceRef.current = driverDance; }, [driverDance]);
   useEffect(() => { passengerDanceRef.current = passengerDance; }, [passengerDance]);
   useEffect(() => { danceSyncedAtRef.current = danceSyncedAt; }, [danceSyncedAt]);
+  useEffect(() => { finaleStartRef.current = finaleStartSec; }, [finaleStartSec]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -272,10 +278,24 @@ export default function PlayCanvasRideScene({
     observer.observe(mount);
     resize();
 
+    // §5c finale state (ride mode)
+    let finaleAtMs = 0;
+    const hopFrom: pc.Vec3[] = [];
+    const nextDanceAt = [0, 0];
+    const danceIdx = [0, 0];
+    let nextBurstAt = 0;
+    const FINALE_DANCES: Record<string, string[]> = {
+      men: ['Jump', 'Clapping', 'Jump'],
+      women: ['Wave', 'Roll', 'Wave'],
+    };
+
     let elapsed = 0;
     app.on('update', (dt: number) => {
       elapsed += dt;
-      const offset = positionRef.current * WORLD_SPEED;
+      // §5c: during the finale the car has pulled over — the world stops
+      const fStart = finaleStartRef.current;
+      const worldPos = fStart != null ? Math.min(positionRef.current, fStart) : positionRef.current;
+      const offset = worldPos * WORLD_SPEED;
 
       // world streams toward -z; props live in a band centred on the car so the
       // orbiting camera always has world in every direction. large props
@@ -323,6 +343,50 @@ export default function PlayCanvasRideScene({
       carRig.setLocalPosition(CAR_X + Math.sin(elapsed * 1.3) * 0.01, Math.sin(elapsed * 2.6) * 0.012, CAR_Z);
       carRig.setLocalEulerAngles(0, 0, Math.sin(elapsed * 1.7) * 0.5);
       carShadow?.setLocalPosition(CAR_X, ROAD_TOP + 0.006, CAR_Z);
+
+      // §5c the Finale: car pulled over, both hop out and celebrate while the
+      // song's last seconds play — wild dances, cheering bursts
+      if (mode === 'ride' && figures && fStart != null && positionRef.current >= fStart) {
+        const now = Date.now();
+        if (finaleAtMs === 0) {
+          finaleAtMs = now;
+          hopFrom.push(
+            figures.driver.handle.root.getLocalPosition().clone(),
+            figures.passenger.handle.root.getLocalPosition().clone(),
+          );
+        }
+        const tSec = (now - finaleAtMs) / 1000;
+        ([figures.driver, figures.passenger] as DancerFig[]).forEach((fig, i) => {
+          const root = fig.handle.root;
+          if (tSec < 0.9) {
+            // hop out of the car: arc from the seat to the roadside
+            const k = tSec / 0.9;
+            const from = hopFrom[i];
+            root.setLocalPosition(
+              from.x + (fig.baseX - from.x) * k,
+              from.y + (fig.baseY - from.y) * k + Math.sin(k * Math.PI) * 0.4,
+              from.z + (fig.baseZ - from.z) * k,
+            );
+          } else {
+            root.setLocalPosition(fig.baseX, fig.baseY, fig.baseZ);
+            if (now > nextDanceAt[i]) {
+              const set = fig.handle.def.set;
+              const clips = FINALE_DANCES[set];
+              const dur = fig.handle.play(clips[danceIdx[i] % clips.length]) || 1.2;
+              danceIdx[i]++;
+              nextDanceAt[i] = now + Math.min(Math.max(dur, 0.8), 4) * 1000 + 250;
+            }
+          }
+        });
+        if (now > nextBurstAt && tSec > 0.7) {
+          nextBurstAt = now + 1500;
+          spawnBurst(
+            app, fireworks, new pc.Vec3(CAR_X + (danceIdx[0] % 2 === 0 ? 1 : -1) * 0.8, 2.4, CAR_Z + 0.6),
+            [colorToNumber(driverColorRef.current), colorToNumber(passengerColorRef.current), 0xffd166, 0xffffff],
+            22, 1.5, 1.0, 0.07,
+          );
+        }
+      }
 
       // §8d the Meeting: characters dance beside the parked car (real clips
       // when the character has one for the move, procedural wiggle otherwise)
@@ -1086,6 +1150,11 @@ function createCar(
       rig.addChild(handle.root);
       handle.play(RIDE_CLIP[handle.def.set]);
     }
+    // figures exposed for the finale (§5c): hop-out targets are rig-local
+    figures = {
+      driver: { handle: dHandle, baseX: 1.5, baseY: ROAD_TOP, baseZ: 1.2, clipUntil: 0, lastDanceAt: 0 },
+      passenger: { handle: pHandle, baseX: -1.5, baseY: ROAD_TOP, baseZ: 1.2, clipUntil: 0, lastDanceAt: 0 },
+    };
   } else {
     // §8d the Meeting: both stand beside the parked car, facing the camera
     const standY = ROAD_TOP;

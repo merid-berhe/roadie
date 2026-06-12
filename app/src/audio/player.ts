@@ -8,6 +8,7 @@ import { fadeBedOut } from './bed';
 let trackGain: Tone.Gain | null = null;
 let trackSource: AudioBufferSourceNode | null = null;
 let localStartTime: number | null = null; // actual local ms when track started playing
+let trackDurationSec: number | null = null; // v5.8 — the decoded track's REAL length
 
 /**
  * Load and schedule the generated track.
@@ -31,6 +32,7 @@ export async function loadAndCrossfade(
     const response = await fetch(audioUrl);
     if (!response.ok) throw new Error(`fetch ${response.status}`);
     const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+    trackDurationSec = buffer.duration; // MiniMax ignores requested duration — measure reality
 
     trackGain = new Tone.Gain(0).toDestination();
     trackSource = ctx.createBufferSource();
@@ -71,6 +73,11 @@ export function getActualPositionSec(): number | null {
   return Math.max(0, (Date.now() - localStartTime) / 1000);
 }
 
+/** The decoded track's real duration (null until loaded). */
+export function getTrackDurationSec(): number | null {
+  return trackDurationSec;
+}
+
 /**
  * Nudge playback rate to correct drift (§9).
  * |drift| > 0.25s → temporarily adjust rate by ±5% until corrected.
@@ -99,4 +106,5 @@ export function stopTrack(): void {
   trackGain = null;
   trackSource = null;
   localStartTime = null;
+  trackDurationSec = null;
 }
