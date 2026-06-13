@@ -1,5 +1,5 @@
-// v6.0 — the Home page: a bright travel-poster front door. Live desert drive
-// as the hero, how-it-works, and the Radio (every song anyone has made).
+// v6.1 — the Home page, reframed as a music app: a sticky nav, a hero where
+// the car is the star, and the Radio front-and-center (the coolest feature).
 // This is the link you send a colleague.
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
@@ -8,7 +8,7 @@ import { Archive, Car, Disc3, Mic, Pause, PenLine, Play, Radio, Route } from 'lu
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { CharacterFace, characterName } from '../components/CharacterFace';
-import { Button, Glass, RoadDivider, SignLabel } from '../components/ui';
+import { Button } from '../components/ui';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -25,8 +25,9 @@ type RadioSong = {
   recipe: { vocals?: boolean; brief?: string } | null;
 };
 
-const STEPS = [
-  [Car, 'get in', 'open a ride link with a friend — one of you drives, one rides shotgun'],
+// the trip, as four stops on one road
+const STOPS = [
+  [Car, 'get in', 'open a ride link with a friend — one drives, one rides shotgun'],
   [PenLine, 'write the song', 'an instrument each, a direction each — the studio fuses them into one track'],
   [Disc3, 'meet & press', 'dance by the car while your song is pressed'],
   [Route, 'ride', 'cruise a real place together to a song that exists nowhere else'],
@@ -34,6 +35,8 @@ const STEPS = [
 
 export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
   const rootRef = useRef<HTMLElement>(null);
+  const listenRef = useRef<HTMLDivElement>(null);
+  const howRef = useRef<HTMLDivElement>(null);
   const [songs, setSongs] = useState<RadioSong[]>([]);
   const [loading, setLoading] = useState(true);
   const [playingIdx, setPlayingIdx] = useState<number | null>(null);
@@ -54,23 +57,22 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
     return () => { audioRef.current?.pause(); };
   }, []);
 
-  // Entrance + scroll reveals — static sections only (song rows arrive async)
+  // entrance + scroll reveals (static sections only — song rows arrive async)
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('[data-hero]', {
-        y: 28, opacity: 0, duration: 0.8, ease: 'power3.out', stagger: 0.12, delay: 0.2,
+        y: 24, opacity: 0, duration: 0.8, ease: 'power3.out', stagger: 0.1, delay: 0.15,
       });
       gsap.utils.toArray<HTMLElement>('[data-reveal]').forEach((el) => {
         gsap.from(el, {
-          y: 26, opacity: 0, duration: 0.7, ease: 'power2.out',
-          scrollTrigger: { trigger: el, start: 'top 88%' },
+          y: 24, opacity: 0, duration: 0.6, ease: 'power2.out',
+          scrollTrigger: { trigger: el, start: 'top 90%' },
         });
       });
     }, rootRef);
     return () => ctx.revert();
   }, []);
 
-  // the running playlist: play one, and it keeps going down the list
   function playFrom(idx: number | null) {
     audioRef.current?.pause();
     audioRef.current = null;
@@ -90,155 +92,218 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
     window.location.href = url.toString();
   }
 
+  function scrollTo(ref: React.RefObject<HTMLElement | null>) {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   const nowPlaying = playingIdx != null ? songs[playingIdx] : null;
 
   return (
     <main ref={rootRef} className="min-h-full bg-cream pb-20">
-      {/* Hero — a live drive through the desert, drag to look around */}
-      <div className="relative h-[58vh] min-h-[440px] overflow-hidden">
-        <HeroScene />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-cream" />
-
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between px-6 pt-5">
-          <div data-hero className="pointer-events-auto">
-            <p className="font-display text-2xl font-semibold tracking-tight text-ink drop-shadow-sm">Roadie</p>
-            <div className="road-dashes mt-1 w-14" />
-          </div>
-          <button
-            data-hero
-            onClick={onGlovebox}
-            className="pointer-events-auto flex items-center gap-2 rounded-full bg-paper/80 px-4 py-2 text-sm font-semibold text-ink shadow-card backdrop-blur-md transition hover:bg-paper"
-          >
-            <Archive size={15} className="text-sunset" />
-            your glovebox
+      {/* Sticky nav */}
+      <nav className="sticky top-0 z-30 border-b border-ink/5 bg-cream/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="text-left">
+            <span className="font-display text-xl font-semibold tracking-tight text-ink">Roadie</span>
+            <span className="road-dashes mt-0.5 block w-12" />
           </button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <NavLink onClick={() => scrollTo(listenRef)} icon={<Radio size={14} />} label="Listen" />
+            <NavLink onClick={() => scrollTo(howRef)} icon={<Route size={14} />} label="How it works" />
+            <NavLink onClick={onGlovebox} icon={<Archive size={14} />} label="Glovebox" />
+            <Button onClick={startRide} className="ml-1 flex items-center gap-2 px-4 py-2 text-sm sm:px-5">
+              <Car size={16} />
+              <span className="hidden sm:inline">start a ride</span>
+              <span className="sm:hidden">ride</span>
+            </Button>
+          </div>
         </div>
+      </nav>
 
-        <div className="absolute inset-x-0 bottom-6 flex justify-center px-5">
-          <Glass className="pointer-events-auto flex max-w-xl flex-col items-center gap-3 px-8 py-6 text-center" >
-            <div data-hero>
-              <SignLabel>a two-seater music game</SignLabel>
-            </div>
-            <h1 data-hero className="font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-              Make a song with someone.
-              <br />
-              Then ride to it.
-            </h1>
-            <div data-hero className="flex flex-col items-center gap-1.5">
-              <Button onClick={startRide} className="flex items-center gap-2 px-8 text-lg">
-                <Car size={20} />
-                start a ride
-              </Button>
-              <p className="text-xs text-ink-soft">you'll get a link to send your co-rider</p>
-            </div>
-          </Glass>
-        </div>
-      </div>
+      {/* Hero — the car is the star; headline sits to the left so it never covers it */}
+      <section className="relative h-[56vh] min-h-[380px] overflow-hidden">
+        <HeroScene />
+        {/* left scrim keeps the headline legible without hiding the center car */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cream/85 via-cream/25 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cream" />
 
-      {/* How it works */}
-      <section className="mx-auto mt-10 max-w-3xl px-5">
-        <div data-reveal className="flex flex-col items-center gap-3 text-center">
-          <SignLabel>how it works</SignLabel>
-          <RoadDivider className="max-w-[160px]" />
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {STEPS.map(([Icon, name, blurb]) => (
-            <div key={name} data-reveal className="rounded-2xl bg-paper px-4 py-4 shadow-card">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sunset/12 text-sunset">
-                <Icon size={18} />
-              </span>
-              <p className="mt-2 font-display text-sm font-semibold text-ink">{name}</p>
-              <p className="mt-1 text-xs leading-5 text-ink-soft">{blurb}</p>
+        <div className="absolute inset-0 flex items-center">
+          <div className="mx-auto flex w-full max-w-5xl px-5">
+            <div className="max-w-md">
+              <p data-hero className="font-display text-xs font-medium uppercase tracking-[0.18em] text-sunset-deep">
+                a two-seater music game
+              </p>
+              <h1 data-hero className="mt-2 font-display text-4xl font-semibold leading-[1.05] text-ink sm:text-5xl">
+                Make a song
+                <br />
+                with someone.
+                <br />
+                <span className="text-sunset">Then ride to it.</span>
+              </h1>
+              <div data-hero className="mt-5 flex flex-col items-start gap-1.5">
+                <Button onClick={startRide} className="flex items-center gap-2 px-7 text-lg">
+                  <Car size={20} />
+                  start a ride
+                </Button>
+                <p className="text-xs text-ink-soft">you'll get a link to send your co-rider</p>
+              </div>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 
-      {/* The Radio */}
-      <section className="mx-auto mt-14 max-w-2xl px-5">
-        <div data-reveal className="mb-1 flex items-center justify-between">
-          <SignLabel className="flex items-center gap-1.5">
-            <Radio size={13} className="text-teal" />
-            the radio
-          </SignLabel>
-          {songs.length > 0 && (
-            <Button
-              variant="secondary"
-              onClick={() => playFrom(playingIdx == null ? 0 : null)}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm"
-            >
-              {playingIdx == null ? <Play size={14} /> : <Pause size={14} />}
-              {playingIdx == null ? 'play all' : 'stop'}
-            </Button>
-          )}
-        </div>
-        <p data-reveal className="mb-5 text-sm text-ink-soft">
-          every song here was made by two people on one ride — nowhere else, never again
-        </p>
-
-        {loading && <p className="text-sm text-ink-faint">tuning…</p>}
-        {!loading && !supabase && (
-          <p className="text-sm text-ink-faint">the radio needs Supabase keys (app/.env.local)</p>
-        )}
-        {!loading && supabase && songs.length === 0 && (
-          <p className="text-sm text-ink-faint">silence so far — be the first two on the air</p>
-        )}
-
-        <div className="flex flex-col gap-2.5">
-          {songs.map((song, idx) => {
-            const isPlaying = playingIdx === idx;
-            const place = song.destinations
-              ? `${song.destinations.name}, ${song.destinations.country}`
-              : song.road ?? 'the road';
-            return (
-              <button
-                key={song.id}
-                onClick={() => playFrom(isPlaying ? null : idx)}
-                className={`flex items-center gap-3 rounded-2xl bg-paper px-4 py-3 text-left shadow-card transition hover:-translate-y-0.5 ${
-                  isPlaying ? 'ring-2 ring-sunset' : ''
-                }`}
+      {/* The Radio — the main event, styled like a streaming app */}
+      <section ref={listenRef} className="mx-auto -mt-4 max-w-3xl scroll-mt-20 px-5">
+        <div className="rounded-3xl bg-paper p-5 shadow-card sm:p-7">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal/12 text-teal">
+                <Radio size={17} />
+              </span>
+              <div>
+                <p className="font-display text-lg font-semibold text-ink">The Radio</p>
+                <p className="text-xs text-ink-soft">
+                  {nowPlaying ? (
+                    <span className="flex items-center gap-1.5">
+                      <NowPlayingBars /> {nowPlaying.title ?? 'untitled'}
+                    </span>
+                  ) : (
+                    'every song made by two people on one ride'
+                  )}
+                </p>
+              </div>
+            </div>
+            {songs.length > 0 && (
+              <Button
+                onClick={() => playFrom(playingIdx == null ? 0 : null)}
+                className="flex items-center gap-1.5 px-5 py-2 text-sm"
               >
-                <span
-                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition ${
-                    isPlaying ? 'bg-sunset text-paper' : 'bg-sunset/12 text-sunset'
+                {playingIdx == null ? <Play size={15} /> : <Pause size={15} />}
+                {playingIdx == null ? 'play all' : 'stop'}
+              </Button>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-1.5">
+            {loading && <p className="py-4 text-sm text-ink-faint">tuning…</p>}
+            {!loading && !supabase && (
+              <p className="py-4 text-sm text-ink-faint">the radio needs Supabase keys (app/.env.local)</p>
+            )}
+            {!loading && supabase && songs.length === 0 && (
+              <p className="py-4 text-sm text-ink-faint">silence so far — be the first two on the air</p>
+            )}
+
+            {songs.map((song, idx) => {
+              const isPlaying = playingIdx === idx;
+              const place = song.destinations
+                ? `${song.destinations.name}, ${song.destinations.country}`
+                : song.road ?? 'the road';
+              return (
+                <button
+                  key={song.id}
+                  onClick={() => playFrom(isPlaying ? null : idx)}
+                  className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                    isPlaying ? 'bg-sunset/10' : 'hover:bg-sand/60'
                   }`}
                 >
-                  {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 truncate font-display text-sm font-semibold text-ink">
-                    {song.title ?? 'untitled'}
-                    {song.recipe?.vocals && <Mic size={12} className="flex-shrink-0 text-teal" />}
-                  </p>
-                  <p className="truncate text-xs text-ink-soft">
-                    {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ') || 'two riders'} · {place} ·{' '}
-                    {new Date(song.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex flex-shrink-0 -space-x-2">
-                  {(song.contributor_glyphs ?? []).slice(0, 2).map((c, i) => (
-                    <CharacterFace key={i} id={c} size={28} />
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                  <span
+                    className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition ${
+                      isPlaying ? 'bg-sunset text-paper' : 'bg-sunset/12 text-sunset group-hover:bg-sunset/20'
+                    }`}
+                  >
+                    {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 truncate font-display text-sm font-semibold text-ink">
+                      {song.title ?? 'untitled'}
+                      {song.recipe?.vocals && <Mic size={12} className="flex-shrink-0 text-teal" />}
+                    </p>
+                    <p className="truncate text-xs text-ink-soft">
+                      {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ') || 'two riders'} · {place} ·{' '}
+                      {new Date(song.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 -space-x-2">
+                    {(song.contributor_glyphs ?? []).slice(0, 2).map((c, i) => (
+                      <CharacterFace key={i} id={c} size={28} />
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
-        {nowPlaying?.recipe?.brief && (
-          <p className="mt-5 text-center text-sm italic text-ink-soft">“{nowPlaying.recipe.brief}”</p>
-        )}
+          {nowPlaying?.recipe?.brief && (
+            <p className="mt-4 border-t border-ink/8 pt-3 text-center text-sm italic text-ink-soft">
+              “{nowPlaying.recipe.brief}”
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* How it works — four stops on one road */}
+      <section ref={howRef} className="mx-auto mt-16 max-w-4xl scroll-mt-20 px-5">
+        <div data-reveal className="mb-8 text-center">
+          <p className="font-display text-xs font-medium uppercase tracking-[0.18em] text-ink-faint">the trip</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold text-ink">four stops, one road</h2>
+        </div>
+        <div className="relative">
+          {/* the road the stops sit on */}
+          <div className="road-dashes absolute left-0 right-0 top-7 hidden md:block" aria-hidden />
+          <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4">
+            {STOPS.map(([Icon, name, blurb], i) => (
+              <li key={name} data-reveal className="relative flex flex-col items-center text-center">
+                <span className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full border-4 border-cream bg-sunset text-paper shadow-warm">
+                  <Icon size={22} />
+                  <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-gold font-display text-xs font-bold text-ink">
+                    {i + 1}
+                  </span>
+                </span>
+                <p className="mt-3 font-display text-base font-semibold text-ink">{name}</p>
+                <p className="mt-1 text-sm leading-5 text-ink-soft">{blurb}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div data-reveal className="mt-10 flex justify-center">
+          <Button onClick={startRide} className="flex items-center gap-2 px-8 text-lg">
+            <Car size={20} />
+            start a ride
+          </Button>
+        </div>
       </section>
 
       <footer className="mt-16 flex flex-col items-center gap-2 px-5">
-        <RoadDivider className="max-w-[120px]" />
+        <span className="road-dashes w-24" aria-hidden />
         <p className="text-xs text-ink-faint">made by two riders at a time</p>
       </footer>
     </main>
   );
 }
 
-// The hero is a real drive — same scene the game runs, dragging orbits the car.
+function NavLink({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold text-ink-soft transition hover:bg-sand/60 hover:text-ink sm:flex"
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function NowPlayingBars() {
+  return (
+    <span className="inline-flex h-3 items-end gap-0.5" aria-hidden>
+      <span className="w-0.5 animate-pulse rounded-full bg-teal" style={{ height: '60%', animationDelay: '0ms' }} />
+      <span className="w-0.5 animate-pulse rounded-full bg-teal" style={{ height: '100%', animationDelay: '150ms' }} />
+      <span className="w-0.5 animate-pulse rounded-full bg-teal" style={{ height: '40%', animationDelay: '300ms' }} />
+    </span>
+  );
+}
+
+// the hero is a real drive — same scene the game runs, dragging orbits the car
 function HeroScene() {
   const [t, setT] = useState(0);
   useEffect(() => {

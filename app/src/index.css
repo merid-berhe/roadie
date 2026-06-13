@@ -50,13 +50,13 @@ body {
 
 /* the road: an animated center-line divider */
 .road-dashes {
-  background-image: linear-gradient(90deg, var(--color-gold) 0 28px, transparent 28px 56px);
-  background-size: 56px 4px;
+  background-image: linear-gradient(90deg, var(--color-gold) 0 14px, transparent 14px 24px);
+  background-size: 24px 100%;
   background-repeat: repeat-x;
   height: 4px;
   border-radius: 2px;
-  animation: dash-drive 1.6s linear infinite;
+  animation: dash-drive 0.9s linear infinite;
 }
 @keyframes dash-drive {
-  to { background-position-x: -56px; }
+  to { background-position-x: -24px; }
 }

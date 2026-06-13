@@ -159,7 +159,7 @@ export default function Riding() {
           {youRider && <p className="text-xs text-ink-faint">you're the {youRider.role}</p>}
 
           <a href={location.pathname} className="pointer-events-auto text-xs text-ink-faint hover:text-ink-soft">
-            new ride
+            exit game
           </a>
         </div>
       </div>

@@ -1,20 +1,17 @@
 // v6.0 shared UI kit — travel-poster language: paper cards, sunset CTAs,
 // road-sign labels. No emoji (lucide icons only).
-import type { ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 
-export function Button({
-  children,
-  onClick,
-  disabled,
-  variant = 'primary',
-  className = '',
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  variant?: 'primary' | 'secondary' | 'ghost';
-  className?: string;
-}) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  {
+    children: ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant?: 'primary' | 'secondary' | 'ghost';
+    className?: string;
+  }
+>(function Button({ children, onClick, disabled, variant = 'primary', className = '' }, ref) {
   const styles = {
     primary:
       'bg-sunset text-paper shadow-warm hover:bg-sunset-deep hover:-translate-y-0.5 active:translate-y-0',
@@ -24,6 +21,7 @@ export function Button({
   }[variant];
   return (
     <button
+      ref={ref}
       onClick={onClick}
       disabled={disabled}
       className={`rounded-full px-6 py-3 font-display font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-40 ${styles} ${className}`}
@@ -31,7 +29,7 @@ export function Button({
       {children}
     </button>
   );
-}
+});
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Mic, Music2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { Mic, Music2, Send, Sparkles } from 'lucide-react';
 import {
   INSTRUMENTS,
   PROMPT_EXAMPLES,
@@ -36,6 +37,8 @@ export default function Compose() {
   const [promptFailed, setPromptFailed] = useState(false);
   const [ownVocals, setOwnVocals] = useState(false);
   const [promptExample] = useState(() => PROMPT_EXAMPLES[Math.floor(Math.random() * PROMPT_EXAMPLES.length)]);
+  const nudgeRef = useRef<HTMLDivElement>(null);
+  const ctaRef = useRef<HTMLButtonElement>(null);
 
   const peer = riders.find((r) => r.role !== you);
   const me = riders.find((r) => r.role === you);
@@ -68,6 +71,21 @@ export default function Compose() {
     setPromptFailed(true);
     track('prompt_rejected');
   }, [promptRejectedAt]);
+
+  // §8 nudge — when the co-rider is ready, make it impossible to miss (GSAP):
+  // the banner pops in and breathes, and the CTA glows to pull the eye to it.
+  useEffect(() => {
+    if (!peerReady) return;
+    const tweens: gsap.core.Tween[] = [];
+    if (nudgeRef.current) {
+      gsap.fromTo(nudgeRef.current, { scale: 0.6, y: 18, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2.2)' });
+      tweens.push(gsap.to(nudgeRef.current, { scale: 1.06, duration: 0.75, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: 0.5 }));
+    }
+    if (ctaRef.current && !isReady) {
+      tweens.push(gsap.to(ctaRef.current, { boxShadow: '0 0 0 6px rgba(232,93,47,0.22)', duration: 0.8, repeat: -1, yoyo: true, ease: 'sine.inOut' }));
+    }
+    return () => { tweens.forEach((t) => t.kill()); if (ctaRef.current) gsap.set(ctaRef.current, { clearProps: 'boxShadow' }); };
+  }, [peerReady, isReady]);
 
   function pickInstrument(name: string) {
     setOwnInstrument(name);
@@ -186,13 +204,16 @@ export default function Compose() {
                 </span>
               </div>
               <Button
-                variant="secondary"
                 onClick={submitPrompt}
                 disabled={!promptText.trim() || promptPending || promptTries >= PROMPT_MAX_TRIES}
-                className="self-end px-4 py-2 text-sm"
+                className="flex items-center justify-center gap-2 py-3"
               >
-                {promptPending ? 'sending…' : ownCard ? 'rewrite' : 'send it'}
+                <Send size={16} />
+                {promptPending ? 'sharing…' : ownCard ? 'update your prompt' : 'share with your co-rider'}
               </Button>
+              <p className="text-center text-xs text-ink-soft">
+                {peerName} sees what you write — it's how you build the song together
+              </p>
             </div>
           )}
           {promptFailed && (
@@ -237,23 +258,27 @@ export default function Compose() {
           </p>
         </Section>
 
-        {/* Peer readiness */}
-        {peerReady && (
-          <p className="mb-4 text-center text-sm font-semibold text-teal-deep">
-            {peerName} is ready to drive
-          </p>
-        )}
       </div>
 
-      {/* Let's drive */}
-      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-2 bg-gradient-to-t from-cream via-cream/90 to-transparent px-5 pb-6 pt-10">
+      {/* Let's ride */}
+      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-3 bg-gradient-to-t from-cream via-cream/90 to-transparent px-5 pb-6 pt-10">
+        {peerReady && (
+          <div
+            ref={nudgeRef}
+            className="flex items-center gap-2 rounded-full bg-teal px-5 py-2.5 font-display text-sm font-bold text-paper shadow-warm"
+          >
+            <Sparkles size={16} />
+            {peerName} is ready — hit the road!
+          </div>
+        )}
         {!ownInstrument && <p className="text-xs text-ink-soft">still need: your instrument</p>}
         <Button
+          ref={ctaRef}
           onClick={goReady}
           disabled={!ownInstrument || isReady}
           className="w-full max-w-xs py-4 text-lg"
         >
-          {isReady ? 'waiting for co-rider…' : "Let's drive"}
+          {isReady ? 'waiting for co-rider…' : "Let's Ride"}
         </Button>
       </div>
     </main>

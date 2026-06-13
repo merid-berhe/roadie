@@ -1,12 +1,11 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { Hand, Mic, Music2, RotateCw, MoveVertical, Sparkles } from 'lucide-react';
+import { ChevronDown, Hand, Mic, Music2, RotateCw, MoveVertical, Sparkles } from 'lucide-react';
 import { DANCE_MOVES, type DanceMove } from '@roadie/shared';
 import type { RoadId } from '../scene/scenes';
 import type { DanceState } from '../scene/PlayCanvasRideScene';
 import { fadeBedIn, startBedSilent } from '../audio/bed';
 import { playFireworkAccent, playGestureSound } from '../audio/gestures';
 import { characterName } from '../components/CharacterFace';
-import { Glass } from '../components/ui';
 import { useRoom } from '../state/room';
 import { track } from '../lib/analytics';
 
@@ -21,7 +20,8 @@ const MOVE_LABELS: Record<DanceMove, { icon: React.ReactNode; word: string }> = 
 
 // §8d The Meeting — the generation wait IS the place where the pair meets.
 // Parked car, ambient bed (whose beat WE control), a dance-off, and the
-// combined prompt on display like a record label being pressed.
+// combined prompt on a SIDE panel (record label being pressed) so the scene
+// stays the star; the long brief/lyrics live behind an accordion.
 export default function Generating() {
   const riders = useRoom((s) => s.riders);
   const destination = useRoom((s) => s.destination);
@@ -33,6 +33,7 @@ export default function Generating() {
   const send = useRoom((s) => s.send);
 
   const [ownDance, setOwnDance] = useState<DanceState>(null);
+  const [expanded, setExpanded] = useState(false);
   const lastDanceSentRef = useRef(0);
   const prevDanceSyncedAt = useRef(0);
 
@@ -64,6 +65,8 @@ export default function Generating() {
   const driverDance: DanceState = you === 'driver' ? ownDance : peerDance ? { move: peerDance.move, at: peerDance.at } : null;
   const passengerDance: DanceState = you === 'passenger' ? ownDance : peerDance ? { move: peerDance.move, at: peerDance.at } : null;
 
+  const hasDetail = Boolean(recipe?.brief || recipe?.lyrics);
+
   return (
     <div className="relative h-screen overflow-hidden bg-sky">
       <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-b from-sky to-cream" />}>
@@ -81,41 +84,57 @@ export default function Generating() {
         />
       </Suspense>
 
-      {/* The record label — what you two asked for */}
-      <div className="pointer-events-none absolute left-0 right-0 top-4 flex flex-col items-center gap-2 px-6">
-        <span className="rounded-full bg-paper/80 px-3 py-1 font-display text-xs font-medium uppercase tracking-[0.18em] text-ink-soft backdrop-blur-md">
-          now pressing your song
-        </span>
-        <Glass className="max-w-md px-4 py-3 text-center">
-          {recipe?.driver.text && (
-            <p className="text-sm font-semibold" style={{ color: driver?.color }}>
-              {characterName(driver?.character) ?? driver?.glyph} “{recipe.driver.text}”
+      {/* The record label — a compact card pinned to the side, not over the car */}
+      <div className="absolute left-4 top-4 w-[min(20rem,calc(100%-2rem))]">
+        <div className="overflow-hidden rounded-2xl bg-paper/90 shadow-card backdrop-blur-md">
+          <div className="flex items-center gap-2 bg-sunset px-4 py-2">
+            <span className="flex h-2 w-2 animate-pulse rounded-full bg-paper" />
+            <p className="font-display text-xs font-medium uppercase tracking-[0.16em] text-paper">now pressing</p>
+          </div>
+          <div className="px-4 py-3">
+            {recipe?.driver.text && (
+              <p className="text-sm font-semibold leading-snug" style={{ color: driver?.color }}>
+                {characterName(driver?.character) ?? driver?.glyph} “{recipe.driver.text}”
+              </p>
+            )}
+            {recipe?.passenger.text && (
+              <p className="mt-1 text-sm font-semibold leading-snug" style={{ color: passenger?.color }}>
+                {characterName(passenger?.character) ?? passenger?.glyph} “{recipe.passenger.text}”
+              </p>
+            )}
+            <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-soft">
+              {recipe ? `${recipe.driver.instrument} + ${recipe.passenger.instrument}` : ''}
+              <span className="inline-flex items-center gap-1">
+                · {recipe?.vocals ? <Mic size={11} /> : <Music2 size={11} />} {recipe?.vocals ? 'sung' : 'instrumental'}
+              </span>
+              {destination ? ` · ${destination.name}` : ''}
             </p>
-          )}
-          {recipe?.passenger.text && (
-            <p className="text-sm font-semibold" style={{ color: passenger?.color }}>
-              {characterName(passenger?.character) ?? passenger?.glyph} “{recipe.passenger.text}”
-            </p>
-          )}
-          <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-ink-soft">
-            {recipe ? `${recipe.driver.instrument} + ${recipe.passenger.instrument}` : ''}
-            <span className="inline-flex items-center gap-1">
-              · {recipe?.vocals ? <Mic size={11} /> : <Music2 size={11} />} {recipe?.vocals ? 'sung' : 'instrumental'}
-            </span>
-            {destination ? ` · ${destination.name}` : ''}
-          </p>
-          {recipe?.brief && (
-            <p className="mt-2 border-t border-ink/10 pt-2 text-xs italic text-ink-soft">
-              the studio hears: {recipe.brief}
-            </p>
-          )}
-          {recipe?.lyrics && (
-            <p className="mt-2 whitespace-pre-line border-t border-ink/10 pt-2 text-xs italic leading-5 text-ink-soft">
-              {recipe.lyrics.split('\n').slice(0, 4).join('\n')}
-              {recipe.lyrics.split('\n').length > 4 ? '\n…' : ''}
-            </p>
-          )}
-        </Glass>
+
+            {hasDetail && (
+              <>
+                <button
+                  onClick={() => setExpanded((v) => !v)}
+                  className="mt-2 flex w-full items-center justify-between border-t border-ink/10 pt-2 text-left text-xs font-semibold text-ink-soft transition hover:text-ink"
+                >
+                  {recipe?.lyrics ? 'the studio hears + lyrics' : 'the studio hears'}
+                  <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                </button>
+                {expanded && (
+                  <div className="mt-2 max-h-[40vh] overflow-y-auto">
+                    {recipe?.brief && (
+                      <p className="text-xs italic leading-5 text-ink-soft">{recipe.brief}</p>
+                    )}
+                    {recipe?.lyrics && (
+                      <p className="mt-2 whitespace-pre-line border-t border-ink/10 pt-2 text-xs italic leading-5 text-ink-soft">
+                        {recipe.lyrics}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Dance-off controls */}
@@ -141,7 +160,7 @@ export default function Generating() {
         <p className="rounded-full bg-paper/60 px-3 py-1 text-xs text-ink-soft backdrop-blur-sm">
           match a move together for a spark · the song takes a minute or two
         </p>
-        <a href={location.pathname} className="text-xs text-ink-soft/60 hover:text-ink-soft">new ride</a>
+        <a href={location.pathname} className="text-xs text-ink-soft/60 hover:text-ink-soft">exit game</a>
       </div>
     </div>
   );
