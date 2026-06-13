@@ -99,9 +99,9 @@ export default function Riding() {
             road={rideRoad}
             positionSec={positionSec}
             driverGlyph={driver?.glyph ?? '▲'}
-            driverColor={driver?.color ?? '#E85D2F'}
+            driverColor={driver?.color ?? '#C23A2B'}
             passengerGlyph={passenger?.glyph ?? '●'}
-            passengerColor={passenger?.color ?? '#18A39A'}
+            passengerColor={passenger?.color ?? '#1F7A74'}
             driverGestureKind={null}
             passengerGestureKind={null}
             firework={null}
@@ -112,8 +112,8 @@ export default function Riding() {
           <PlayCanvasRideScene
             road={rideRoad}
             positionSec={positionSec}
-            driverColor={driver?.color ?? '#E85D2F'}
-            passengerColor={passenger?.color ?? '#18A39A'}
+            driverColor={driver?.color ?? '#C23A2B'}
+            passengerColor={passenger?.color ?? '#1F7A74'}
             driverCharacter={driver?.character}
             passengerCharacter={passenger?.character}
             finaleStartSec={finaleStartSec}

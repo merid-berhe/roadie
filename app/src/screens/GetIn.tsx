@@ -51,8 +51,8 @@ export default function GetIn() {
         <PlayCanvasRideScene
           road="coast"
           positionSec={t}
-          driverColor="#E85D2F"
-          passengerColor="#18A39A"
+          driverColor="#C23A2B"
+          passengerColor="#1F7A74"
           driverCharacter="theo"
           passengerCharacter="wren"
         />

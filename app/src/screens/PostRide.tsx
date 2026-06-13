@@ -70,9 +70,9 @@ export default function PostRide({ songId, onGlovebox, onNewRide }: Props) {
               onClick={() => setSurvey(opt)}
               className="flex-1 rounded-xl border-2 bg-paper py-3 text-sm shadow-card transition active:scale-95"
               style={{
-                borderColor: survey === opt ? '#E85D2F' : 'rgba(40,32,26,0.08)',
-                background:  survey === opt ? '#E85D2F1A' : undefined,
-                color:       survey === opt ? '#C44A22' : '#6F5F4E',
+                borderColor: survey === opt ? '#C23A2B' : 'rgba(27,42,51,0.10)',
+                background:  survey === opt ? '#C23A2B1A' : undefined,
+                color:       survey === opt ? '#9E2D20' : '#45575F',
                 fontWeight:  survey === opt ? 700 : 500,
               }}
             >
@@ -94,8 +94,8 @@ export default function PostRide({ songId, onGlovebox, onNewRide }: Props) {
                 onClick={() => toggleToken(id)}
                 className="flex flex-col items-center gap-1.5 rounded-xl border-2 bg-paper px-4 py-3 shadow-card transition active:scale-90"
                 style={{
-                  borderColor: on ? '#F5B62E' : 'rgba(40,32,26,0.08)',
-                  background: on ? '#F5B62E26' : undefined,
+                  borderColor: on ? '#E6B23E' : 'rgba(27,42,51,0.10)',
+                  background: on ? '#E6B23E26' : undefined,
                 }}
               >
                 <Icon size={22} className={on ? 'text-sunset' : 'text-ink-faint'} />

@@ -73,8 +73,8 @@ export default function Generating() {
         <PlayCanvasRideScene
           road={(destination?.theme ?? selectedRoad) as RoadId}
           positionSec={0}
-          driverColor={driver?.color ?? '#E85D2F'}
-          passengerColor={passenger?.color ?? '#18A39A'}
+          driverColor={driver?.color ?? '#C23A2B'}
+          passengerColor={passenger?.color ?? '#1F7A74'}
           driverCharacter={driver?.character}
           passengerCharacter={passenger?.character}
           mode="meeting"

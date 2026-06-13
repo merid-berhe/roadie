@@ -124,8 +124,8 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
       <section className="relative h-[56vh] min-h-[380px] overflow-hidden">
         <HeroScene />
         {/* left scrim keeps the headline legible without hiding the center car */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cream/85 via-cream/25 to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cream" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cream via-cream/55 to-transparent sm:via-cream/35" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-b from-transparent to-cream" />
 
         <div className="absolute inset-0 flex items-center">
           <div className="mx-auto flex w-full max-w-5xl px-5">
@@ -153,7 +153,7 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
       </section>
 
       {/* The Radio — the main event, styled like a streaming app */}
-      <section ref={listenRef} className="mx-auto -mt-4 max-w-3xl scroll-mt-20 px-5">
+      <section ref={listenRef} className="mx-auto mt-8 max-w-3xl scroll-mt-20 px-5">
         <div className="rounded-3xl bg-paper p-5 shadow-card sm:p-7">
           <div className="mb-1 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -319,10 +319,10 @@ function HeroScene() {
   return (
     <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-b from-sky to-cream" />}>
       <PlayCanvasRideScene
-        road="desert"
+        road="mountain"
         positionSec={t}
-        driverColor="#E85D2F"
-        passengerColor="#18A39A"
+        driverColor="#C23A2B"
+        passengerColor="#1F7A74"
         driverCharacter="moss"
         passengerCharacter="juno"
       />

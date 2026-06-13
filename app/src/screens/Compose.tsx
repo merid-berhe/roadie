@@ -82,7 +82,7 @@ export default function Compose() {
       tweens.push(gsap.to(nudgeRef.current, { scale: 1.06, duration: 0.75, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: 0.5 }));
     }
     if (ctaRef.current && !isReady) {
-      tweens.push(gsap.to(ctaRef.current, { boxShadow: '0 0 0 6px rgba(232,93,47,0.22)', duration: 0.8, repeat: -1, yoyo: true, ease: 'sine.inOut' }));
+      tweens.push(gsap.to(ctaRef.current, { boxShadow: '0 0 0 6px rgba(194,58,43,0.26)', duration: 0.8, repeat: -1, yoyo: true, ease: 'sine.inOut' }));
     }
     return () => { tweens.forEach((t) => t.kill()); if (ctaRef.current) gsap.set(ctaRef.current, { clearProps: 'boxShadow' }); };
   }, [peerReady, isReady]);
@@ -163,7 +163,7 @@ export default function Compose() {
             ))}
           </div>
           {peerInstrument && (
-            <p className="mt-2 text-xs font-semibold" style={{ color: peer?.color ?? '#18A39A' }}>
+            <p className="mt-2 text-xs font-semibold" style={{ color: peer?.color ?? '#1F7A74' }}>
               {peerName} brings the {peerInstrument}
             </p>
           )}
@@ -198,7 +198,7 @@ export default function Compose() {
                 />
                 <span
                   className="pointer-events-none absolute bottom-2.5 right-3 text-xs tabular-nums"
-                  style={{ color: charsLeft <= 15 ? '#E85D2F' : '#A3937E' }}
+                  style={{ color: charsLeft <= 15 ? '#C23A2B' : '#8597A0' }}
                 >
                   {charsLeft}
                 </span>
@@ -224,7 +224,7 @@ export default function Compose() {
           {peerCard && (
             <p className="mt-2 text-xs text-ink-soft">
               {peerCardName} wrote{' '}
-              <span className="font-semibold" style={{ color: peer?.color ?? '#18A39A' }}>{peerCard.display}</span>
+              <span className="font-semibold" style={{ color: peer?.color ?? '#1F7A74' }}>{peerCard.display}</span>
             </p>
           )}
         </Section>
@@ -299,15 +299,15 @@ function ChoiceButton({
 }: {
   label: string; icon?: React.ReactNode; selected: boolean; color?: string; onSelect: () => void;
 }) {
-  const accent = color ?? '#E85D2F';
+  const accent = color ?? '#C23A2B';
   return (
     <button
       onClick={onSelect}
       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 bg-paper px-2 py-3 text-sm shadow-card transition active:scale-95"
       style={{
-        borderColor: selected ? accent : 'rgba(40,32,26,0.08)',
+        borderColor: selected ? accent : 'rgba(27,42,51,0.10)',
         background: selected ? `${accent}1A` : undefined,
-        color: selected ? '#28201A' : '#6F5F4E',
+        color: selected ? '#28201A' : '#45575F',
         fontWeight: selected ? 700 : 500,
       }}
     >

@@ -10,25 +10,28 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-cream: #fbf4e6;
-  --color-paper: #fffdf7;
-  --color-sand: #f3e7d2;
-  --color-ink: #28201a;
-  --color-ink-soft: #6f5f4e;
-  --color-ink-faint: #a3937e;
-  --color-sunset: #e85d2f;
-  --color-sunset-deep: #c44a22;
-  --color-gold: #f5b62e;
-  --color-teal: #18a39a;
-  --color-teal-deep: #0e7e77;
-  --color-sky: #8ac9e8;
-  --color-sage: #8fa968;
+  /* v6.2 — Norway / Lofoten palette: cool fjord tones with the iconic red
+     rorbu (fishing-cabin) as the one warm accent. Token NAMES are kept so
+     the whole app re-themes from these values alone. */
+  --color-cream: #ecf1f4;       /* snow — the base surface */
+  --color-paper: #fbfdfe;       /* near-white, cool — cards */
+  --color-sand: #dbe6ea;        /* light steel-blue — fills / hovers */
+  --color-ink: #1b2a33;         /* deep fjord navy — text */
+  --color-ink-soft: #45575f;    /* slate — secondary text */
+  --color-ink-faint: #8597a0;   /* cool grey — decorative text */
+  --color-sunset: #c23a2b;      /* Lofoten rorbu red — primary accent / CTA */
+  --color-sunset-deep: #9e2d20; /* hover */
+  --color-gold: #e6b23e;        /* road-line amber — the one bright marker */
+  --color-teal: #1f7a74;        /* fjord teal — secondary accent */
+  --color-teal-deep: #145d58;
+  --color-sky: #9dc3d6;         /* nordic sky */
+  --color-sage: #6f8c7c;        /* cool pine */
 
   --font-display: 'Fredoka', 'Nunito Sans', sans-serif;
   --font-body: 'Nunito Sans', system-ui, sans-serif;
 
-  --shadow-warm: 0 8px 24px -8px rgb(196 74 34 / 0.28);
-  --shadow-card: 0 6px 20px -6px rgb(40 32 26 / 0.14);
+  --shadow-warm: 0 8px 24px -8px rgb(158 45 32 / 0.30);
+  --shadow-card: 0 6px 20px -6px rgb(27 42 51 / 0.16);
 }
 
 html,
