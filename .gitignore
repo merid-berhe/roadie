@@ -16,3 +16,6 @@ party/.dev.vars
 CLAUDE.md
 BACKLOG.md
 masterRule.md
+
+# large imported environment GLBs (kept local — too big for git)
+app/public/assets/scene/full_gameready_*.glb
