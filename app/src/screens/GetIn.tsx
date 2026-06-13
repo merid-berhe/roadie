@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getAudioState, onAudioStateChange, startIdleHum, unlockAudio } from '../audio/engine';
 import { ensureIdentity } from '../auth/identity';
 import { useSession } from '../state/session';
+import { Button, RoadDivider } from '../components/ui';
 
 export default function GetIn() {
   const setIdentity = useSession((s) => s.setIdentity);
@@ -31,31 +32,28 @@ export default function GetIn() {
   }
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-[#0b1020] px-6 text-white">
-      <div className="text-center">
-        <h1 className="text-4xl font-semibold tracking-tight">Roadie</h1>
-        <p className="mt-2 text-white/50">make a song with a stranger. ride along to it.</p>
+    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-cream px-6">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <h1 className="font-display text-5xl font-semibold tracking-tight text-ink">Roadie</h1>
+        <RoadDivider className="max-w-[112px]" />
+        <p className="text-ink-soft">make a song with someone. ride along to it.</p>
       </div>
 
-      <button
-        onClick={handleGetIn}
-        disabled={!agreed || entering}
-        className="rounded-full bg-amber-400 px-10 py-4 text-lg font-semibold text-black transition active:scale-95 disabled:opacity-40"
-      >
+      <Button onClick={handleGetIn} disabled={!agreed || entering} className="px-10 text-lg">
         {entering ? 'getting in…' : 'Get in'}
-      </button>
+      </Button>
 
-      <label className="flex items-center gap-2 text-sm text-white/60">
+      <label className="flex items-center gap-2 text-sm text-ink-soft">
         <input
           type="checkbox"
           checked={agreed}
           onChange={(e) => setAgreed(e.target.checked)}
-          className="h-4 w-4 accent-amber-400"
+          className="h-4 w-4 accent-sunset"
         />
         I'm 18 or older
       </label>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-sunset-deep">{error}</p>}
     </main>
   );
 }

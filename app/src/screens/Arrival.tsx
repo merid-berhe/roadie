@@ -1,12 +1,15 @@
 import { useState } from 'react';
+import { MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { characterName } from '../components/CharacterFace';
+import { Button, RoadDivider, SignLabel } from '../components/ui';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
 type Props = { onDone: (songId: string | null) => void };
 
+// v6.0 — arrival is a postcard from the destination, co-signed by both riders.
 export default function Arrival({ onDone }: Props) {
   const userId    = useSession((s) => s.userId);
   const riders    = useRoom((s) => s.riders);
@@ -99,20 +102,25 @@ export default function Arrival({ onDone }: Props) {
   }
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-[#0b1020] px-6 text-center text-white">
-      <p className="text-sm uppercase tracking-widest text-white/40">you've arrived</p>
+    <main className="flex min-h-full flex-col items-center justify-center gap-7 bg-cream px-6 py-10 text-center">
+      <SignLabel>you've arrived</SignLabel>
 
+      {/* The postcard */}
       {destination && (
-        <div className="max-w-sm">
-          <p className="text-2xl font-semibold">{destination.name}</p>
-          <p className="mt-1 text-sm text-white/45">{destination.region}, {destination.country}</p>
-          <p className="mt-4 text-sm leading-6 text-white/65">{destination.fact}</p>
+        <div className="relative w-full max-w-md rounded-2xl border border-ink/10 bg-paper px-6 py-6 text-left shadow-card">
+          <span className="absolute right-4 top-4 flex h-11 w-11 rotate-3 items-center justify-center rounded-md border-2 border-dashed border-sunset/50 text-sunset">
+            <MapPin size={18} />
+          </span>
+          <p className="pr-14 font-display text-2xl font-semibold text-ink">{destination.name}</p>
+          <p className="mt-0.5 text-sm text-ink-soft">{destination.region}, {destination.country}</p>
+          <RoadDivider className="my-4 max-w-[120px]" />
+          <p className="text-sm leading-6 text-ink-soft">{destination.fact}</p>
         </div>
       )}
 
       {/* Attribution — §5: "we made this together" legible after the fact */}
       {recipe && (
-        <div className="flex flex-col gap-1 text-center text-sm">
+        <div className="flex flex-col gap-1 text-center text-sm font-semibold">
           {driver && (
             <p style={{ color: driver.color }}>
               {characterName(driver.character) ?? driver.glyph} {recipe.driver.text ? `“${recipe.driver.text}”` : `brought the ${recipe.driver.instrument}`}
@@ -129,29 +137,25 @@ export default function Arrival({ onDone }: Props) {
       {/* Co-naming */}
       {!submitted ? (
         <div className="flex w-full max-w-xs flex-col gap-3">
-          <p className="text-sm text-white/60">add one word to name your song</p>
+          <p className="text-sm text-ink-soft">add one word to name your song</p>
           <input
-            className="rounded-lg bg-white/10 px-4 py-3 text-center text-white placeholder-white/30 outline-none focus:bg-white/15"
+            className="rounded-xl border-2 border-ink/10 bg-paper px-4 py-3 text-center text-ink shadow-card placeholder:text-ink-faint focus:border-sunset/60 focus:outline-none"
             placeholder="one word…"
             value={ownWord}
             maxLength={20}
             onChange={(e) => setOwnWord(e.target.value.replace(/\s/g, ''))}
             onKeyDown={(e) => e.key === 'Enter' && submitWord()}
           />
-          <button
-            onClick={submitWord}
-            disabled={!ownWord.trim()}
-            className="rounded-full bg-amber-400 py-3 font-semibold text-black disabled:opacity-30"
-          >
+          <Button onClick={submitWord} disabled={!ownWord.trim()} className="py-3">
             submit
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-2">
-          <p className="text-white/50 text-sm">your word: <span className="text-white">{ownWord}</span></p>
+          <p className="text-sm text-ink-soft">your word: <span className="font-semibold text-ink">{ownWord}</span></p>
           {peerNameWord
-            ? <p className="text-white/50 text-sm">co-rider's word: <span className="text-white">{peerNameWord}</span></p>
-            : <p className="text-white/40 text-xs">waiting for co-rider's word…</p>
+            ? <p className="text-sm text-ink-soft">co-rider's word: <span className="font-semibold text-ink">{peerNameWord}</span></p>
+            : <p className="text-xs text-ink-faint">waiting for co-rider's word…</p>
           }
         </div>
       )}
@@ -159,16 +163,12 @@ export default function Arrival({ onDone }: Props) {
       {/* Title + save */}
       {title && (
         <div className="flex flex-col items-center gap-4">
-          <p className="text-2xl font-semibold">"{title}"</p>
-          <button
-            onClick={saveToGlovebox}
-            disabled={saving || !supabase}
-            className="rounded-full bg-amber-400 px-8 py-3 font-semibold text-black disabled:opacity-30"
-          >
+          <p className="font-display text-3xl font-semibold text-ink">"{title}"</p>
+          <Button onClick={saveToGlovebox} disabled={saving || !supabase} className="px-8 py-3">
             {saving ? 'saving…' : supabase ? 'save to glovebox' : 'save (needs Supabase keys)'}
-          </button>
+          </Button>
           {!supabase && (
-            <p className="text-xs text-white/30">add VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to app/.env.local</p>
+            <p className="text-xs text-ink-faint">add VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to app/.env.local</p>
           )}
         </div>
       )}

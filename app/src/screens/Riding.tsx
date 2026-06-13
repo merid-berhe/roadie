@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Flag } from 'lucide-react';
 import { getPalette } from '../scene/palette';
 import type { RoadId } from '../scene/scenes';
 import { getActualPositionSec, getTrackDurationSec, nudgePlayback } from '../audio/player';
@@ -93,26 +94,26 @@ export default function Riding() {
       style={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBottom})` }}
     >
       {usePixiScene ? (
-        <Suspense fallback={<div className="absolute inset-0 bg-[#0b1020]" />}>
+        <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-b from-sky to-cream" />}>
           <PixiSceneCanvas
             road={rideRoad}
             positionSec={positionSec}
             driverGlyph={driver?.glyph ?? '▲'}
-            driverColor={driver?.color ?? '#F5A623'}
+            driverColor={driver?.color ?? '#E85D2F'}
             passengerGlyph={passenger?.glyph ?? '●'}
-            passengerColor={passenger?.color ?? '#1FB6C4'}
+            passengerColor={passenger?.color ?? '#18A39A'}
             driverGestureKind={null}
             passengerGestureKind={null}
             firework={null}
           />
         </Suspense>
       ) : (
-        <Suspense fallback={<div className="absolute inset-0 bg-[#0b1020]" />}>
+        <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-b from-sky to-cream" />}>
           <PlayCanvasRideScene
             road={rideRoad}
             positionSec={positionSec}
-            driverColor={driver?.color ?? '#F5A623'}
-            passengerColor={passenger?.color ?? '#1FB6C4'}
+            driverColor={driver?.color ?? '#E85D2F'}
+            passengerColor={passenger?.color ?? '#18A39A'}
             driverCharacter={driver?.character}
             passengerCharacter={passenger?.character}
             finaleStartSec={finaleStartSec}
@@ -122,34 +123,45 @@ export default function Riding() {
 
       {/* §5c finale caption */}
       {inFinale && (
-        <p className="pointer-events-none absolute left-0 right-0 top-8 text-center text-sm text-white/75">
-          🏁 you made it — that's your song
+        <p className="pointer-events-none absolute left-1/2 top-8 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-paper/85 px-4 py-1.5 text-sm font-semibold text-ink shadow-card backdrop-blur-md">
+          <Flag size={14} className="text-sunset" />
+          you made it — that's your song
         </p>
       )}
 
       {/* HUD */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center gap-3 pb-4 pt-2">
-        {/* Progress bar */}
-        <div className="h-0.5 w-3/4 rounded-full bg-white/10">
-          <div className="h-full rounded-full bg-white/40 transition-all" style={{ width: `${progress * 100}%` }} />
-        </div>
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-col items-center pb-4">
+        <div className="flex w-full max-w-sm flex-col items-center gap-2 rounded-2xl bg-paper/80 px-5 py-3 shadow-card backdrop-blur-md">
+          {/* Progress bar — the road so far */}
+          <div className="h-1 w-full rounded-full bg-ink/10">
+            <div className="h-full rounded-full bg-sunset transition-all" style={{ width: `${progress * 100}%` }} />
+          </div>
 
-        {/* Attribution + role */}
-        <div className="flex items-center gap-4">
-          {driver && <span className="text-xs" style={{ color: driver.color }}>{characterName(driver.character) ?? driver.glyph} · {recipe?.driver.instrument}</span>}
-          <span className="text-xs text-white/20">×</span>
-          {passenger && <span className="text-xs" style={{ color: passenger.color }}>{characterName(passenger.character) ?? passenger.glyph} · {recipe?.passenger.instrument}</span>}
-        </div>
-        {destination && (
-          <p className="max-w-[18rem] truncate text-xs text-white/35">
-            {destination.name}, {destination.country}
-          </p>
-        )}
-        {youRider && <p className="text-xs text-white/30">you're the {youRider.role}</p>}
+          {/* Attribution + role */}
+          <div className="flex items-center gap-3">
+            {driver && (
+              <span className="text-xs font-semibold" style={{ color: driver.color }}>
+                {characterName(driver.character) ?? driver.glyph} · {recipe?.driver.instrument}
+              </span>
+            )}
+            <span className="text-xs text-ink-faint">×</span>
+            {passenger && (
+              <span className="text-xs font-semibold" style={{ color: passenger.color }}>
+                {characterName(passenger.character) ?? passenger.glyph} · {recipe?.passenger.instrument}
+              </span>
+            )}
+          </div>
+          {destination && (
+            <p className="max-w-[18rem] truncate text-xs text-ink-soft">
+              {destination.name}, {destination.country}
+            </p>
+          )}
+          {youRider && <p className="text-xs text-ink-faint">you're the {youRider.role}</p>}
 
-        <a href={location.pathname} className="pointer-events-auto text-xs text-white/20 hover:text-white/40">
-          new ride
-        </a>
+          <a href={location.pathname} className="pointer-events-auto text-xs text-ink-faint hover:text-ink-soft">
+            new ride
+          </a>
+        </div>
       </div>
     </div>
   );

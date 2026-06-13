@@ -1,9 +1,18 @@
-// v5.3 — the Home page: intro to the game + the Radio (every song anyone has
-// made, playable). This is the link you send a colleague.
-import { useEffect, useRef, useState } from 'react';
+// v6.0 — the Home page: a bright travel-poster front door. Live desert drive
+// as the hero, how-it-works, and the Radio (every song anyone has made).
+// This is the link you send a colleague.
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { Archive, Car, Disc3, Mic, Pause, PenLine, Play, Radio, Route } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { CharacterFace, characterName } from '../components/CharacterFace';
+import { Button, Glass, RoadDivider, SignLabel } from '../components/ui';
+
+gsap.registerPlugin(ScrollTrigger);
+
+const PlayCanvasRideScene = lazy(() => import('../scene/PlayCanvasRideScene'));
 
 type RadioSong = {
   id: string;
@@ -17,13 +26,14 @@ type RadioSong = {
 };
 
 const STEPS = [
-  ['🚗', 'get in', 'open a ride link with a friend — one of you drives, one rides shotgun'],
-  ['✍️', 'write the song', 'a mood each, a prompt each — the studio fuses them into one track'],
-  ['🕺', 'meet & press', 'dance by the car while your song is pressed'],
-  ['🛣', 'ride', 'cruise a real place together to a song that exists nowhere else'],
+  [Car, 'get in', 'open a ride link with a friend — one of you drives, one rides shotgun'],
+  [PenLine, 'write the song', 'an instrument each, a direction each — the studio fuses them into one track'],
+  [Disc3, 'meet & press', 'dance by the car while your song is pressed'],
+  [Route, 'ride', 'cruise a real place together to a song that exists nowhere else'],
 ] as const;
 
 export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
+  const rootRef = useRef<HTMLElement>(null);
   const [songs, setSongs] = useState<RadioSong[]>([]);
   const [loading, setLoading] = useState(true);
   const [playingIdx, setPlayingIdx] = useState<number | null>(null);
@@ -42,6 +52,22 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
         setLoading(false);
       });
     return () => { audioRef.current?.pause(); };
+  }, []);
+
+  // Entrance + scroll reveals — static sections only (song rows arrive async)
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.from('[data-hero]', {
+        y: 28, opacity: 0, duration: 0.8, ease: 'power3.out', stagger: 0.12, delay: 0.2,
+      });
+      gsap.utils.toArray<HTMLElement>('[data-reveal]').forEach((el) => {
+        gsap.from(el, {
+          y: 26, opacity: 0, duration: 0.7, ease: 'power2.out',
+          scrollTrigger: { trigger: el, start: 'top 88%' },
+        });
+      });
+    }, rootRef);
+    return () => ctx.revert();
   }, []);
 
   // the running playlist: play one, and it keeps going down the list
@@ -67,63 +93,98 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
   const nowPlaying = playingIdx != null ? songs[playingIdx] : null;
 
   return (
-    <main className="min-h-full bg-[#0b1020] px-5 pb-24 pt-10 text-white">
-      {/* Hero */}
-      <div className="mx-auto max-w-md text-center">
-        <p className="text-5xl">🚗</p>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight">Roadie</h1>
-        <p className="mt-2 text-white/55">
-          make a song with someone, then ride to it.
-        </p>
-        <button
-          onClick={startRide}
-          className="mt-6 w-full max-w-xs rounded-full bg-amber-400 py-4 text-lg font-semibold text-black transition active:scale-95"
-        >
-          start a ride
-        </button>
-        <p className="mt-2 text-xs text-white/35">you'll get a link to send your co-rider</p>
-        <button onClick={onGlovebox} className="mt-4 text-sm text-white/45 underline-offset-4 hover:text-white/70">
-          🧤 your glovebox
-        </button>
+    <main ref={rootRef} className="min-h-full bg-cream pb-20">
+      {/* Hero — a live drive through the desert, drag to look around */}
+      <div className="relative h-[58vh] min-h-[440px] overflow-hidden">
+        <HeroScene />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-cream" />
+
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between px-6 pt-5">
+          <div data-hero className="pointer-events-auto">
+            <p className="font-display text-2xl font-semibold tracking-tight text-ink drop-shadow-sm">Roadie</p>
+            <div className="road-dashes mt-1 w-14" />
+          </div>
+          <button
+            data-hero
+            onClick={onGlovebox}
+            className="pointer-events-auto flex items-center gap-2 rounded-full bg-paper/80 px-4 py-2 text-sm font-semibold text-ink shadow-card backdrop-blur-md transition hover:bg-paper"
+          >
+            <Archive size={15} className="text-sunset" />
+            your glovebox
+          </button>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-6 flex justify-center px-5">
+          <Glass className="pointer-events-auto flex max-w-xl flex-col items-center gap-3 px-8 py-6 text-center" >
+            <div data-hero>
+              <SignLabel>a two-seater music game</SignLabel>
+            </div>
+            <h1 data-hero className="font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">
+              Make a song with someone.
+              <br />
+              Then ride to it.
+            </h1>
+            <div data-hero className="flex flex-col items-center gap-1.5">
+              <Button onClick={startRide} className="flex items-center gap-2 px-8 text-lg">
+                <Car size={20} />
+                start a ride
+              </Button>
+              <p className="text-xs text-ink-soft">you'll get a link to send your co-rider</p>
+            </div>
+          </Glass>
+        </div>
       </div>
 
       {/* How it works */}
-      <div className="mx-auto mt-10 grid max-w-md grid-cols-2 gap-3">
-        {STEPS.map(([icon, name, blurb]) => (
-          <div key={name} className="rounded-xl bg-white/[0.04] px-3 py-3">
-            <p className="text-xl">{icon}</p>
-            <p className="mt-1 text-sm font-semibold">{name}</p>
-            <p className="mt-1 text-xs leading-5 text-white/45">{blurb}</p>
-          </div>
-        ))}
-      </div>
+      <section className="mx-auto mt-10 max-w-3xl px-5">
+        <div data-reveal className="flex flex-col items-center gap-3 text-center">
+          <SignLabel>how it works</SignLabel>
+          <RoadDivider className="max-w-[160px]" />
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {STEPS.map(([Icon, name, blurb]) => (
+            <div key={name} data-reveal className="rounded-2xl bg-paper px-4 py-4 shadow-card">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sunset/12 text-sunset">
+                <Icon size={18} />
+              </span>
+              <p className="mt-2 font-display text-sm font-semibold text-ink">{name}</p>
+              <p className="mt-1 text-xs leading-5 text-ink-soft">{blurb}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* The Radio */}
-      <div className="mx-auto mt-12 max-w-md">
-        <div className="mb-3 flex items-baseline justify-between">
-          <p className="text-sm font-semibold uppercase tracking-widest text-white/50">📻 the radio</p>
+      <section className="mx-auto mt-14 max-w-2xl px-5">
+        <div data-reveal className="mb-1 flex items-center justify-between">
+          <SignLabel className="flex items-center gap-1.5">
+            <Radio size={13} className="text-teal" />
+            the radio
+          </SignLabel>
           {songs.length > 0 && (
-            <button
+            <Button
+              variant="secondary"
               onClick={() => playFrom(playingIdx == null ? 0 : null)}
-              className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/75 active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-sm"
             >
-              {playingIdx == null ? '▶ play all' : '⏸ stop'}
-            </button>
+              {playingIdx == null ? <Play size={14} /> : <Pause size={14} />}
+              {playingIdx == null ? 'play all' : 'stop'}
+            </Button>
           )}
         </div>
-        <p className="mb-4 text-xs text-white/35">
+        <p data-reveal className="mb-5 text-sm text-ink-soft">
           every song here was made by two people on one ride — nowhere else, never again
         </p>
 
-        {loading && <p className="text-sm text-white/30">tuning…</p>}
+        {loading && <p className="text-sm text-ink-faint">tuning…</p>}
         {!loading && !supabase && (
-          <p className="text-sm text-white/30">the radio needs Supabase keys (app/.env.local)</p>
+          <p className="text-sm text-ink-faint">the radio needs Supabase keys (app/.env.local)</p>
         )}
         {!loading && supabase && songs.length === 0 && (
-          <p className="text-sm text-white/30">silence so far — be the first two on the air</p>
+          <p className="text-sm text-ink-faint">silence so far — be the first two on the air</p>
         )}
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {songs.map((song, idx) => {
             const isPlaying = playingIdx === idx;
             const place = song.destinations
@@ -133,28 +194,30 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
               <button
                 key={song.id}
                 onClick={() => playFrom(isPlaying ? null : idx)}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition active:bg-white/10"
-                style={{ background: isPlaying ? 'rgba(245,166,35,0.12)' : 'rgba(255,255,255,0.04)' }}
+                className={`flex items-center gap-3 rounded-2xl bg-paper px-4 py-3 text-left shadow-card transition hover:-translate-y-0.5 ${
+                  isPlaying ? 'ring-2 ring-sunset' : ''
+                }`}
               >
-                <div
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border text-sm"
-                  style={{ borderColor: isPlaying ? '#F5A623' : 'rgba(255,255,255,0.15)' }}
+                <span
+                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition ${
+                    isPlaying ? 'bg-sunset text-paper' : 'bg-sunset/12 text-sunset'
+                  }`}
                 >
-                  {isPlaying ? '⏸' : '▶'}
-                </div>
+                  {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
+                  <p className="flex items-center gap-1.5 truncate font-display text-sm font-semibold text-ink">
                     {song.title ?? 'untitled'}
-                    {song.recipe?.vocals ? ' 🎤' : ''}
+                    {song.recipe?.vocals && <Mic size={12} className="flex-shrink-0 text-teal" />}
                   </p>
-                  <p className="truncate text-xs text-white/40">
+                  <p className="truncate text-xs text-ink-soft">
                     {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ') || 'two riders'} · {place} ·{' '}
                     {new Date(song.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="flex flex-shrink-0 -space-x-2">
                   {(song.contributor_glyphs ?? []).slice(0, 2).map((c, i) => (
-                    <CharacterFace key={i} id={c} size={26} />
+                    <CharacterFace key={i} id={c} size={28} />
                   ))}
                 </div>
               </button>
@@ -163,10 +226,42 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
         </div>
 
         {nowPlaying?.recipe?.brief && (
-          <p className="mt-4 text-center text-xs italic text-white/40">“{nowPlaying.recipe.brief}”</p>
+          <p className="mt-5 text-center text-sm italic text-ink-soft">“{nowPlaying.recipe.brief}”</p>
         )}
-      </div>
+      </section>
+
+      <footer className="mt-16 flex flex-col items-center gap-2 px-5">
+        <RoadDivider className="max-w-[120px]" />
+        <p className="text-xs text-ink-faint">made by two riders at a time</p>
+      </footer>
     </main>
+  );
+}
+
+// The hero is a real drive — same scene the game runs, dragging orbits the car.
+function HeroScene() {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    let raf: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      setT((now - start) / 1000);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-b from-sky to-cream" />}>
+      <PlayCanvasRideScene
+        road="desert"
+        positionSec={t}
+        driverColor="#E85D2F"
+        passengerColor="#18A39A"
+        driverCharacter="moss"
+        passengerCharacter="juno"
+      />
+    </Suspense>
   );
 }
 

@@ -11,12 +11,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource/fredoka": "^5.2.10",
+    "@fontsource/nunito-sans": "^5.2.7",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@roadie/shared": "*",
     "@supabase/supabase-js": "^2.45.0",
     "@types/three": "^0.184.1",
     "3d-tiles-renderer": "^0.4.27",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.18.0",
     "partysocket": "^1.1.19",
     "pixi.js": "^8.19.0",
     "playcanvas": "^2.19.6",

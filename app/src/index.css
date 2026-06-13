@@ -1,4 +1,35 @@
-@import "tailwindcss";
+/* Roadie design system (v6.0) — "the travel poster".
+   Bright cream paper, sunset accents, friendly rounded display type.
+   Inspiration: vintage national-park posters, Alto's Odyssey menus. */
+@import '@fontsource/fredoka/400.css';
+@import '@fontsource/fredoka/500.css';
+@import '@fontsource/fredoka/600.css';
+@import '@fontsource/nunito-sans/400.css';
+@import '@fontsource/nunito-sans/600.css';
+@import '@fontsource/nunito-sans/700.css';
+@import 'tailwindcss';
+
+@theme {
+  --color-cream: #fbf4e6;
+  --color-paper: #fffdf7;
+  --color-sand: #f3e7d2;
+  --color-ink: #28201a;
+  --color-ink-soft: #6f5f4e;
+  --color-ink-faint: #a3937e;
+  --color-sunset: #e85d2f;
+  --color-sunset-deep: #c44a22;
+  --color-gold: #f5b62e;
+  --color-teal: #18a39a;
+  --color-teal-deep: #0e7e77;
+  --color-sky: #8ac9e8;
+  --color-sage: #8fa968;
+
+  --font-display: 'Fredoka', 'Nunito Sans', sans-serif;
+  --font-body: 'Nunito Sans', system-ui, sans-serif;
+
+  --shadow-warm: 0 8px 24px -8px rgb(196 74 34 / 0.28);
+  --shadow-card: 0 6px 20px -6px rgb(40 32 26 / 0.14);
+}
 
 html,
 body,
@@ -12,4 +43,20 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  font-family: var(--font-body);
+  background: var(--color-cream);
+  color: var(--color-ink);
+}
+
+/* the road: an animated center-line divider */
+.road-dashes {
+  background-image: linear-gradient(90deg, var(--color-gold) 0 28px, transparent 28px 56px);
+  background-size: 56px 4px;
+  background-repeat: repeat-x;
+  height: 4px;
+  border-radius: 2px;
+  animation: dash-drive 1.6s linear infinite;
+}
+@keyframes dash-drive {
+  to { background-position-x: -56px; }
 }

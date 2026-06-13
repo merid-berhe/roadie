@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Mic, Music2 } from 'lucide-react';
 import {
   INSTRUMENTS,
   PROMPT_EXAMPLES,
@@ -6,13 +7,14 @@ import {
   PROMPT_MAX_TRIES,
 } from '@roadie/shared';
 import { CharacterFace, characterName } from '../components/CharacterFace';
+import { Button, SignLabel } from '../components/ui';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 import { track } from '../lib/analytics';
 
-// §5 v5.0 — prompt-first composition: a mood word each (drives the visuals,
-// guarantees a valid song with zero typing) + an optional free-text prompt.
-// fal is the arbiter of interpretation; the gate only moderates.
+// §5 v5.6 — prompt-first composition: an instrument each (required) + a
+// free-text direction each. fal is the arbiter of interpretation; the gate
+// only moderates.
 export default function Compose() {
   const identity = useSession((s) => s.identity);
   const you = useRoom((s) => s.you);
@@ -98,147 +100,161 @@ export default function Compose() {
   const charsLeft = PROMPT_MAX_CHARS - promptText.length;
 
   return (
-    <main className="flex min-h-full flex-col bg-[#0b1020] px-5 pb-32 pt-8 text-white">
-      {/* Header */}
-      <div className="mb-6 text-center">
-        <p className="text-xs uppercase tracking-widest text-white/40">making your song</p>
-        <div className="mt-3 flex items-center justify-center gap-6">
-          <div className="flex flex-col items-center gap-1">
-            <CharacterFace id={me?.character} color={identity?.color} size={56} />
-            <p className="text-xs text-white/45">{characterName(me?.character) ?? 'you'}</p>
-          </div>
-          <span className="text-sm text-white/30">+</span>
-          <div className="flex flex-col items-center gap-1">
-            <CharacterFace id={peer?.character} color={peer?.color} size={56} />
-            <p className="text-xs text-white/45">{peer ? peerName : 'waiting…'}</p>
+    <main className="flex min-h-full flex-col bg-cream px-5 pb-44 pt-8">
+      <div className="mx-auto w-full max-w-md">
+        {/* Header */}
+        <div className="mb-7 text-center">
+          <SignLabel>making your song</SignLabel>
+          <div className="mt-4 flex items-center justify-center gap-6">
+            <div className="flex flex-col items-center gap-1">
+              <CharacterFace id={me?.character} color={identity?.color} size={56} />
+              <p className="text-xs text-ink-soft">{characterName(me?.character) ?? 'you'}</p>
+            </div>
+            <span className="font-display text-ink-faint">+</span>
+            <div className="flex flex-col items-center gap-1">
+              <CharacterFace id={peer?.character} color={peer?.color} size={56} />
+              <p className="text-xs text-ink-soft">{peer ? peerName : 'waiting…'}</p>
+            </div>
           </div>
         </div>
+
+        {destination && (
+          <Section title="today's destination">
+            <div className="rounded-2xl bg-paper px-4 py-4 text-left shadow-card">
+              <p className="font-display text-lg font-semibold text-ink">{destination.name}</p>
+              <p className="text-sm text-ink-soft">{destination.region}, {destination.country}</p>
+              <p className="mt-3 text-sm leading-6 text-ink-soft">{destination.fact}</p>
+              <p className="mt-3 font-display text-xs font-medium uppercase tracking-[0.18em] text-ink-faint">
+                {destination.theme} road
+              </p>
+            </div>
+          </Section>
+        )}
+
+        {/* Featured instrument — the required tap */}
+        <Section title="pick your instrument">
+          <div className="grid grid-cols-2 gap-2">
+            {INSTRUMENTS.map((name) => (
+              <ChoiceButton
+                key={name}
+                label={name}
+                selected={ownInstrument === name}
+                color={identity?.color}
+                onSelect={() => pickInstrument(name)}
+              />
+            ))}
+          </div>
+          {peerInstrument && (
+            <p className="mt-2 text-xs font-semibold" style={{ color: peer?.color ?? '#18A39A' }}>
+              {peerName} brings the {peerInstrument}
+            </p>
+          )}
+          {!peerPicked && !peerInstrument && (
+            <p className="mt-2 text-xs text-ink-faint">waiting for co-rider's instrument…</p>
+          )}
+        </Section>
+
+        {/* Direction paragraph — the heart of the song */}
+        <Section title="write the song">
+          <p className="mb-2 text-xs text-ink-soft">
+            describe the mood and lyrical direction for your song — the studio blends both riders' directions into one track
+          </p>
+          {ownCard && (
+            <div className="mb-2 rounded-xl bg-paper px-3 py-2 shadow-card">
+              <p className="text-xs text-ink-soft">
+                you wrote <span className="font-semibold" style={{ color: identity?.color }}>{ownCard.display}</span>
+              </p>
+            </div>
+          )}
+          {(!ownCard || promptTries < PROMPT_MAX_TRIES) && (
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <textarea
+                  value={promptText}
+                  maxLength={PROMPT_MAX_CHARS}
+                  rows={3}
+                  placeholder={`e.g. ${promptExample}`}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  disabled={promptPending || promptTries >= PROMPT_MAX_TRIES}
+                  className="w-full resize-none rounded-xl border-2 border-ink/10 bg-paper px-3 py-2 pb-6 text-sm leading-5 text-ink shadow-card placeholder:text-ink-faint focus:border-sunset/60 focus:outline-none disabled:opacity-50"
+                />
+                <span
+                  className="pointer-events-none absolute bottom-2.5 right-3 text-xs tabular-nums"
+                  style={{ color: charsLeft <= 15 ? '#E85D2F' : '#A3937E' }}
+                >
+                  {charsLeft}
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={submitPrompt}
+                disabled={!promptText.trim() || promptPending || promptTries >= PROMPT_MAX_TRIES}
+                className="self-end px-4 py-2 text-sm"
+              >
+                {promptPending ? 'sending…' : ownCard ? 'rewrite' : 'send it'}
+              </Button>
+            </div>
+          )}
+          {promptFailed && (
+            <p className="mt-2 text-xs text-sunset-deep">
+              the studio couldn't take that one. try different words?
+            </p>
+          )}
+          {peerCard && (
+            <p className="mt-2 text-xs text-ink-soft">
+              {peerCardName} wrote{' '}
+              <span className="font-semibold" style={{ color: peer?.color ?? '#18A39A' }}>{peerCard.display}</span>
+            </p>
+          )}
+        </Section>
+
+        {/* Vocals — both must opt in (§12) */}
+        <Section title="voice">
+          <div className="flex gap-2">
+            <ChoiceButton
+              label="instrumental"
+              icon={<Music2 size={15} />}
+              selected={!ownVocals}
+              color={identity?.color}
+              onSelect={() => { if (ownVocals) toggleVocals(); }}
+            />
+            <ChoiceButton
+              label="sung"
+              icon={<Mic size={15} />}
+              selected={ownVocals}
+              color={identity?.color}
+              onSelect={() => { if (!ownVocals) toggleVocals(); }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-ink-soft">
+            {bothVocals
+              ? 'you both want vocals — this song will sing'
+              : peerWantsVocals
+              ? `${peerName} wants vocals — pick sung to agree`
+              : ownVocals
+              ? `waiting for ${peerName} to agree to vocals`
+              : 'songs stay instrumental unless you both pick sung'}
+          </p>
+        </Section>
+
+        {/* Peer readiness */}
+        {peerReady && (
+          <p className="mb-4 text-center text-sm font-semibold text-teal-deep">
+            {peerName} is ready to drive
+          </p>
+        )}
       </div>
 
-      {destination && (
-        <Section title="TODAY'S DESTINATION">
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
-            <p className="text-lg font-semibold text-white">{destination.name}</p>
-            <p className="text-sm text-white/45">{destination.region}, {destination.country}</p>
-            <p className="mt-3 text-sm leading-6 text-white/65">{destination.fact}</p>
-            <p className="mt-3 text-xs uppercase tracking-wider text-white/30">{destination.theme} road</p>
-          </div>
-        </Section>
-      )}
-
-      {/* Featured instrument — the required tap */}
-      <Section title="PICK YOUR INSTRUMENT">
-        <div className="grid grid-cols-2 gap-2">
-          {INSTRUMENTS.map((name) => (
-            <ChoiceButton
-              key={name}
-              label={name}
-              selected={ownInstrument === name}
-              color={identity?.color}
-              onSelect={() => pickInstrument(name)}
-            />
-          ))}
-        </div>
-        {peerInstrument && (
-          <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peerName} brings the <span className="font-semibold">{peerInstrument}</span>
-          </p>
-        )}
-        {!peerPicked && !peerInstrument && (
-          <p className="mt-2 text-xs text-white/30">waiting for co-rider's instrument…</p>
-        )}
-      </Section>
-
-      {/* Direction paragraph — the heart of the song */}
-      <Section title="WRITE THE SONG">
-        <p className="mb-2 text-xs text-white/35">
-          describe the mood and lyrical direction for your song — the studio blends both riders' directions into one track
-        </p>
-        {ownCard && (
-          <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-            <p className="text-xs" style={{ color: identity?.color }}>
-              you wrote <span className="font-semibold">{ownCard.display}</span>
-            </p>
-          </div>
-        )}
-        {(!ownCard || promptTries < PROMPT_MAX_TRIES) && (
-          <div className="flex flex-col gap-2">
-            <div className="relative">
-              <textarea
-                value={promptText}
-                maxLength={PROMPT_MAX_CHARS}
-                rows={3}
-                placeholder={`e.g. ${promptExample}`}
-                onChange={(e) => setPromptText(e.target.value)}
-                disabled={promptPending || promptTries >= PROMPT_MAX_TRIES}
-                className="w-full resize-none rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 pb-6 text-sm leading-5 text-white placeholder:text-white/25 focus:border-white/30 focus:outline-none disabled:opacity-50"
-              />
-              <span
-                className="pointer-events-none absolute bottom-2 right-3 text-xs tabular-nums"
-                style={{ color: charsLeft <= 15 ? '#fbbf24' : 'rgba(255,255,255,0.3)' }}
-              >
-                {charsLeft}
-              </span>
-            </div>
-            <button
-              onClick={submitPrompt}
-              disabled={!promptText.trim() || promptPending || promptTries >= PROMPT_MAX_TRIES}
-              className="self-end rounded-lg border border-white/12 px-4 py-2 text-sm text-white/70 transition active:scale-95 disabled:opacity-40"
-            >
-              {promptPending ? 'sending…' : ownCard ? 'rewrite' : 'send it'}
-            </button>
-          </div>
-        )}
-        {promptFailed && (
-          <p className="mt-2 text-xs text-amber-400/80">
-            the studio couldn't take that one. try different words?
-          </p>
-        )}
-        {peerCard && (
-          <p className="mt-2 text-xs" style={{ color: peer?.color ?? '#1FB6C4' }}>
-            {peerCardName} wrote <span className="font-semibold">{peerCard.display}</span>
-          </p>
-        )}
-      </Section>
-
-      {/* Vocals — both must opt in (§12) */}
-      <Section title="VOICE">
-        <div className="flex gap-2">
-          <ChoiceButton label="🎻 instrumental" selected={!ownVocals} color={identity?.color} onSelect={() => { if (ownVocals) toggleVocals(); }} />
-          <ChoiceButton label="🎤 sung" selected={ownVocals} color={identity?.color} onSelect={() => { if (!ownVocals) toggleVocals(); }} />
-        </div>
-        <p className="mt-2 text-xs text-white/30">
-          {bothVocals
-            ? '🎤 you both want vocals — this song will sing'
-            : peerWantsVocals
-            ? `${peerName} wants vocals — pick 🎤 to agree`
-            : ownVocals
-            ? `waiting for ${peerName} to agree to vocals`
-            : 'songs stay instrumental unless you both pick 🎤'}
-        </p>
-      </Section>
-
-      {/* Peer readiness */}
-      {peerReady && (
-        <p className="mb-4 text-center text-sm text-emerald-400">
-          {peerName} is ready to drive
-        </p>
-      )}
-
       {/* Let's drive */}
-      <div className="fixed bottom-6 left-0 right-0 flex flex-col items-center gap-2 px-5">
-        {!ownInstrument && <p className="text-xs text-white/40">still need: your instrument</p>}
-        <button
+      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-2 bg-gradient-to-t from-cream via-cream/90 to-transparent px-5 pb-6 pt-10">
+        {!ownInstrument && <p className="text-xs text-ink-soft">still need: your instrument</p>}
+        <Button
           onClick={goReady}
-          disabled={isReady}
-          className="w-full max-w-xs rounded-full py-4 text-lg font-semibold transition active:scale-95"
-          style={{
-            background: ownInstrument ? '#F5A623' : 'rgba(255,255,255,0.1)',
-            color: ownInstrument ? '#000' : 'rgba(255,255,255,0.3)',
-          }}
+          disabled={!ownInstrument || isReady}
+          className="w-full max-w-xs py-4 text-lg"
         >
           {isReady ? 'waiting for co-rider…' : "Let's drive"}
-        </button>
+        </Button>
       </div>
     </main>
   );
@@ -246,29 +262,31 @@ export default function Compose() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mb-6">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">{title}</p>
+    <div className="mb-7">
+      <p className="mb-3 font-display text-xs font-medium uppercase tracking-[0.18em] text-ink-faint">{title}</p>
       {children}
     </div>
   );
 }
 
 function ChoiceButton({
-  label, selected, color, onSelect,
+  label, icon, selected, color, onSelect,
 }: {
-  label: string; selected: boolean; color?: string; onSelect: () => void;
+  label: string; icon?: React.ReactNode; selected: boolean; color?: string; onSelect: () => void;
 }) {
+  const accent = color ?? '#E85D2F';
   return (
     <button
       onClick={onSelect}
-      className="flex-1 rounded-lg border px-2 py-3 text-sm transition active:scale-95"
+      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 bg-paper px-2 py-3 text-sm shadow-card transition active:scale-95"
       style={{
-        borderColor: selected ? (color ?? '#F5A623') : 'rgba(255,255,255,0.12)',
-        background: selected ? `${(color ?? '#F5A623')}22` : 'transparent',
-        color: selected ? (color ?? '#F5A623') : 'rgba(255,255,255,0.6)',
-        fontWeight: selected ? 600 : 400,
+        borderColor: selected ? accent : 'rgba(40,32,26,0.08)',
+        background: selected ? `${accent}1A` : undefined,
+        color: selected ? '#28201A' : '#6F5F4E',
+        fontWeight: selected ? 700 : 500,
       }}
     >
+      {icon}
       {label}
     </button>
   );

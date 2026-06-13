@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { inviteLink } from '../lib/roomCode';
 import { CharacterFace, characterName } from '../components/CharacterFace';
+import { Button, SignLabel } from '../components/ui';
 import { useRoom } from '../state/room';
 import { useSession } from '../state/session';
 
+// v6.0 — the lobby is a boarding pass: two seats, one of them still open.
 export default function Lobby({ roomCode }: { roomCode: string }) {
   const identity = useSession((s) => s.identity);
   const you = useRoom((s) => s.you);
@@ -23,43 +26,52 @@ export default function Lobby({ roomCode }: { roomCode: string }) {
   }
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-[#0b1020] px-6 text-center text-white">
-      <p className="text-sm uppercase tracking-widest text-white/40">the lobby</p>
+    <main className="flex min-h-full flex-col items-center justify-center gap-6 bg-cream px-6">
+      <SignLabel>boarding</SignLabel>
 
-      <div className="flex items-center gap-10">
-        <div className="flex flex-col items-center gap-2">
-          <CharacterFace id={yourRider?.character} color={yourRider?.color ?? identity?.color} size={72} />
-          <p className="text-xs text-white/50">
-            {yourName ? `you're ${yourName}` : 'you'}{you ? ` · ${you}` : ''}
+      {/* The boarding pass */}
+      <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-paper shadow-card">
+        <div className="flex items-center justify-between bg-sunset px-5 py-3">
+          <p className="font-display font-semibold text-paper">Roadie</p>
+          <p className="font-display text-xs font-medium uppercase tracking-[0.18em] text-paper/85">
+            ride {roomCode}
           </p>
         </div>
-        <span className="text-2xl text-white/20">+</span>
-        {peerRider ? (
+
+        <div className="flex items-center justify-center gap-10 px-6 py-7">
           <div className="flex flex-col items-center gap-2">
-            <CharacterFace id={peerRider.character} color={peerRider.color} size={72} />
-            <p className="text-xs text-white/50">
-              {characterName(peerRider.character) ?? 'co-rider'} · {peerRider.role}
+            <CharacterFace id={yourRider?.character} color={yourRider?.color ?? identity?.color} size={72} />
+            <p className="text-xs text-ink-soft">
+              {yourName ? `you're ${yourName}` : 'you'}{you ? ` · ${you}` : ''}
             </p>
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <div className="h-[72px] w-[72px] rounded-full border-2 border-dashed border-white/15" />
-            <p className="text-xs text-white/50">waiting…</p>
-          </div>
-        )}
-      </div>
+          <span className="font-display text-2xl text-ink-faint">+</span>
+          {peerRider ? (
+            <div className="flex flex-col items-center gap-2">
+              <CharacterFace id={peerRider.character} color={peerRider.color} size={72} />
+              <p className="text-xs text-ink-soft">
+                {characterName(peerRider.character) ?? 'co-rider'} · {peerRider.role}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <div className="h-[72px] w-[72px] rounded-full border-2 border-dashed border-ink/15" />
+              <p className="text-xs text-ink-faint">seat open…</p>
+            </div>
+          )}
+        </div>
 
-      <div className="flex w-full max-w-xs flex-col items-center gap-3">
-        <p className="text-sm text-white/50">send this to your co-rider:</p>
-        <code className="w-full truncate rounded bg-white/5 px-3 py-2 text-xs text-white/60">
-          {inviteLink(roomCode)}
-        </code>
-        <button onClick={copyInvite} className="rounded-full border border-white/20 px-5 py-2 text-sm">
-          {copied ? 'copied ✓' : 'copy invite link'}
-        </button>
+        <div className="border-t-2 border-dashed border-ink/10 px-6 py-5">
+          <p className="text-sm text-ink-soft">send this to your co-rider:</p>
+          <code className="mt-2 block w-full truncate rounded-lg bg-sand px-3 py-2 text-xs text-ink-soft">
+            {inviteLink(roomCode)}
+          </code>
+          <Button variant="secondary" onClick={copyInvite} className="mt-3 flex w-full items-center justify-center gap-2 py-2.5 text-sm">
+            {copied ? <Check size={15} className="text-teal" /> : <Copy size={15} />}
+            {copied ? 'copied' : 'copy invite link'}
+          </Button>
+        </div>
       </div>
-
-      <p className="text-xs text-white/20">room {roomCode}</p>
     </main>
   );
 }

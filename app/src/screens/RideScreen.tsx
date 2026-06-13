@@ -105,20 +105,20 @@ export default function RideScreen() {
 
   if (rejectedFull) {
     return (
-      <main className="flex min-h-full flex-col items-center justify-center gap-4 bg-[#0b1020] text-white">
-        <p className="text-lg">this car's already full</p>
-        <p className="text-sm text-white/50">two riders per ride.</p>
-        <a href={location.pathname} className="mt-2 rounded-full bg-amber-400 px-6 py-3 font-semibold text-black">start a new ride</a>
+      <main className="flex min-h-full flex-col items-center justify-center gap-4 bg-cream text-center">
+        <p className="font-display text-lg font-semibold text-ink">this car's already full</p>
+        <p className="text-sm text-ink-soft">two riders per ride.</p>
+        <a href={location.pathname} className="mt-2 rounded-full bg-sunset px-6 py-3 font-display font-semibold text-paper shadow-warm">start a new ride</a>
       </main>
     );
   }
 
   if (generationFailed) {
     return (
-      <main className="flex min-h-full flex-col items-center justify-center gap-4 bg-[#0b1020] px-6 text-center text-white">
-        <p className="text-lg">the studio was busy today</p>
-        <p className="text-sm text-white/50">your song didn't print. the road's still open.</p>
-        <a href={location.pathname} className="mt-4 rounded-full bg-amber-400 px-6 py-3 font-semibold text-black">try again</a>
+      <main className="flex min-h-full flex-col items-center justify-center gap-4 bg-cream px-6 text-center">
+        <p className="font-display text-lg font-semibold text-ink">the studio was busy today</p>
+        <p className="text-sm text-ink-soft">your song didn't print. the road's still open.</p>
+        <a href={location.pathname} className="mt-4 rounded-full bg-sunset px-6 py-3 font-display font-semibold text-paper shadow-warm">try again</a>
       </main>
     );
   }
@@ -143,7 +143,7 @@ export default function RideScreen() {
   }
 
   if (!connected) {
-    return <main className="flex min-h-full items-center justify-center bg-[#0b1020] text-white/30 text-sm">connecting…</main>;
+    return <main className="flex min-h-full items-center justify-center bg-cream text-sm text-ink-faint">connecting…</main>;
   }
 
   if (!full) return <Lobby roomCode={roomCode} />;

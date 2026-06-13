@@ -1,8 +1,11 @@
 // §2: minimal glovebox — list saved songs, playable. Keyed by userId (§6).
+// v6.0 — a shelf of cassettes, each one a ride you took.
 import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Pause, Play } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { characterName } from '../components/CharacterFace';
+import { SignLabel } from '../components/ui';
 import { useSession } from '../state/session';
 
 type Song = {
@@ -51,55 +54,67 @@ export default function Glovebox({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <main className="flex min-h-full flex-col bg-[#0b1020] px-5 pt-8 text-white">
-      <div className="mb-6 flex items-center gap-4">
-        <button onClick={onBack} className="text-white/40 hover:text-white/70">←</button>
-        <div>
-          <p className="text-sm uppercase tracking-widest text-white/40">glovebox</p>
-          {identity && (
-            <p className="text-xs text-white/30">
-              <span style={{ color: identity.color }}>{identity.glyph}</span> {identity.colorName} rider
-            </p>
-          )}
+    <main className="flex min-h-full flex-col bg-cream px-5 pb-16 pt-8">
+      <div className="mx-auto w-full max-w-xl">
+        <div className="mb-7 flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-paper text-ink-soft shadow-card transition hover:text-ink"
+          >
+            <ArrowLeft size={17} />
+          </button>
+          <div>
+            <SignLabel>glovebox</SignLabel>
+            {identity && (
+              <p className="mt-1 text-xs text-ink-faint">
+                <span className="font-semibold" style={{ color: identity.color }}>{identity.colorName}</span> rider
+              </p>
+            )}
+          </div>
         </div>
-      </div>
 
-      {loading && <p className="text-white/30 text-sm">loading…</p>}
-      {!loading && !supabase && (
-        <p className="text-white/30 text-sm">Glovebox needs Supabase keys (see app/.env.local)</p>
-      )}
-      {!loading && supabase && songs.length === 0 && (
-        <p className="text-white/30 text-sm">no songs yet — finish a ride to save one</p>
-      )}
+        {loading && <p className="text-sm text-ink-faint">loading…</p>}
+        {!loading && !supabase && (
+          <p className="text-sm text-ink-faint">Glovebox needs Supabase keys (see app/.env.local)</p>
+        )}
+        {!loading && supabase && songs.length === 0 && (
+          <p className="text-sm text-ink-faint">no songs yet — finish a ride to save one</p>
+        )}
 
-      <div className="flex flex-col gap-4">
-        {songs.map((song) => {
-          const date = new Date(song.created_at).toLocaleDateString();
-          const isPlaying = playing === song.id;
-          const place = song.destinations
-            ? `${song.destinations.name}, ${song.destinations.country}`
-            : song.road ?? 'road';
-          return (
-            <button
-              key={song.id}
-              onClick={() => playSong(song)}
-              className="flex items-center gap-4 rounded-xl bg-white/5 px-4 py-3 text-left active:bg-white/10"
-            >
-              <div
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-lg"
-                style={{ background: isPlaying ? '#F5A62333' : 'transparent', border: '1px solid rgba(255,255,255,0.15)' }}
+        <div className="flex flex-col gap-3">
+          {songs.map((song) => {
+            const date = new Date(song.created_at).toLocaleDateString();
+            const isPlaying = playing === song.id;
+            const place = song.destinations
+              ? `${song.destinations.name}, ${song.destinations.country}`
+              : song.road ?? 'road';
+            return (
+              <button
+                key={song.id}
+                onClick={() => playSong(song)}
+                className={`flex items-center gap-4 overflow-hidden rounded-2xl bg-paper py-3 pl-0 pr-4 text-left shadow-card transition hover:-translate-y-0.5 ${
+                  isPlaying ? 'ring-2 ring-sunset' : ''
+                }`}
               >
-                {isPlaying ? '⏸' : '▶'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="truncate font-medium">{song.title ?? 'untitled'}</p>
-                <p className="text-xs text-white/40">
-                  {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ')} · {place} · {date}
-                </p>
-              </div>
-            </button>
-          );
-        })}
+                {/* cassette spine */}
+                <span className="h-12 w-1.5 flex-shrink-0 rounded-r-full bg-gold" />
+                <span
+                  className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition ${
+                    isPlaying ? 'bg-sunset text-paper' : 'bg-sunset/12 text-sunset'
+                  }`}
+                >
+                  {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-display font-semibold text-ink">{song.title ?? 'untitled'}</p>
+                  <p className="truncate text-xs text-ink-soft">
+                    {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ')} · {place} · {date}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </main>
   );
