@@ -9,6 +9,7 @@ import ScenePreview from './screens/ScenePreview';
 import CarPreview from './screens/CarPreview';
 import WorldViewer from './screens/WorldViewer';
 import CitySpike from './screens/CitySpike';
+import ProcCitySpike from './screens/ProcCitySpike';
 import Home from './screens/Home';
 import Radio from './screens/Radio';
 import Glovebox from './screens/Glovebox';
@@ -20,6 +21,7 @@ const isPreview   = params.has('scene');
 const isCarPreview = params.has('car');
 const isWorldViewer = params.has('world');
 const isCitySpike = params.has('city');
+const isProcCity = params.has('proc');
 const roomParam = params.get('room');
 
 export default function App() {
@@ -46,6 +48,7 @@ export default function App() {
   if (isCarPreview) return <CarPreview />;
   if (isWorldViewer) return <WorldViewer />;
   if (isCitySpike) return <CitySpike />;
+  if (isProcCity) return <ProcCitySpike />;
 
   // v5.3: a bare link is the front door — intro + the Radio. Rides live at ?room=.
   // v6.3: the Radio is its own page (a listening hangout), not just a Home section.
