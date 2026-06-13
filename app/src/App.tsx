@@ -8,6 +8,7 @@ import ModelInspector from './screens/ModelInspector';
 import ScenePreview from './screens/ScenePreview';
 import CarPreview from './screens/CarPreview';
 import Home from './screens/Home';
+import Radio from './screens/Radio';
 import Glovebox from './screens/Glovebox';
 import { useSession } from './state/session';
 
@@ -20,7 +21,7 @@ const roomParam = params.get('room');
 export default function App() {
   const identity = useSession((s) => s.identity);
   const setIdentity = useSession((s) => s.setIdentity);
-  const [showGlovebox, setShowGlovebox] = useState(false);
+  const [view, setView] = useState<'home' | 'radio' | 'glovebox'>('home');
 
   // On the bare site (Home/Glovebox), recover the persisted anonymous session
   // so the Glovebox can read the user's own saved songs. Identity is otherwise
@@ -40,11 +41,12 @@ export default function App() {
   if (isPreview)   return <ScenePreview />;
   if (isCarPreview) return <CarPreview />;
 
-  // v5.3: a bare link is the front door — intro + the Radio. Rides live at ?room=
+  // v5.3: a bare link is the front door — intro + the Radio. Rides live at ?room=.
+  // v6.3: the Radio is its own page (a listening hangout), not just a Home section.
   if (!roomParam) {
-    return showGlovebox
-      ? <Glovebox onBack={() => setShowGlovebox(false)} />
-      : <Home onGlovebox={() => setShowGlovebox(true)} />;
+    if (view === 'glovebox') return <Glovebox onBack={() => setView('home')} />;
+    if (view === 'radio')    return <Radio onBack={() => setView('home')} onGlovebox={() => setView('glovebox')} />;
+    return <Home onOpenRadio={() => setView('radio')} onGlovebox={() => setView('glovebox')} />;
   }
 
   return (

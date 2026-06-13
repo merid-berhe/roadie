@@ -4,7 +4,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Archive, Car, Disc3, Mic, Pause, PenLine, Play, Radio, Route } from 'lucide-react';
+import { Archive, ArrowRight, Car, Disc3, Mic, PenLine, Play, Radio, Route } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
 import { CharacterFace, characterName } from '../components/CharacterFace';
@@ -33,28 +33,25 @@ const STOPS = [
   [Route, 'ride', 'cruise a real place together to a song that exists nowhere else'],
 ] as const;
 
-export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
+export default function Home({ onOpenRadio, onGlovebox }: { onOpenRadio: () => void; onGlovebox: () => void }) {
   const rootRef = useRef<HTMLElement>(null);
-  const listenRef = useRef<HTMLDivElement>(null);
   const howRef = useRef<HTMLDivElement>(null);
   const [songs, setSongs] = useState<RadioSong[]>([]);
   const [loading, setLoading] = useState(true);
-  const [playingIdx, setPlayingIdx] = useState<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // a small taste of the Radio — the full hangout lives on its own page (v6.3)
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
     supabase
       .from('songs')
       .select('id, title, audio_url, contributor_glyphs, road, created_at, recipe, destinations(name, country)')
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(4)
       .then(({ data, error }) => {
         if (error) console.warn('[radio]', error.message);
         setSongs((data as unknown as RadioSong[]) ?? []);
         setLoading(false);
       });
-    return () => { audioRef.current?.pause(); };
   }, []);
 
   // entrance + scroll reveals (static sections only — song rows arrive async)
@@ -73,18 +70,6 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
     return () => ctx.revert();
   }, []);
 
-  function playFrom(idx: number | null) {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setPlayingIdx(idx);
-    if (idx == null || !songs[idx]) return;
-    const audio = new Audio(songs[idx].audio_url);
-    audio.play().catch(() => setPlayingIdx(null));
-    audio.onended = () => playFrom(idx + 1 < songs.length ? idx + 1 : null);
-    audioRef.current = audio;
-    track('radio_played', { song_id: songs[idx].id });
-  }
-
   function startRide() {
     const url = new URL(window.location.href);
     url.searchParams.set('room', randomCode());
@@ -96,8 +81,6 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  const nowPlaying = playingIdx != null ? songs[playingIdx] : null;
-
   return (
     <main ref={rootRef} className="min-h-full bg-cream pb-20">
       {/* Sticky nav */}
@@ -108,7 +91,7 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
             <span className="road-dashes mt-0.5 block w-12" />
           </button>
           <div className="flex items-center gap-1 sm:gap-2">
-            <NavLink onClick={() => scrollTo(listenRef)} icon={<Radio size={14} />} label="Listen" />
+            <NavLink onClick={onOpenRadio} icon={<Radio size={14} />} label="Listen" />
             <NavLink onClick={() => scrollTo(howRef)} icon={<Route size={14} />} label="How it works" />
             <NavLink onClick={onGlovebox} icon={<Archive size={14} />} label="Glovebox" />
             <Button onClick={startRide} className="ml-1 flex items-center gap-2 px-4 py-2 text-sm sm:px-5">
@@ -152,66 +135,44 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
         </div>
       </section>
 
-      {/* The Radio — the main event, styled like a streaming app */}
-      <section ref={listenRef} className="mx-auto mt-8 max-w-3xl scroll-mt-20 px-5">
-        <div className="rounded-3xl bg-paper p-5 shadow-card sm:p-7">
-          <div className="mb-1 flex items-center justify-between">
+      {/* The Radio — a taste; the full listening hangout is its own page (v6.3) */}
+      <section className="mx-auto mt-8 max-w-3xl px-5">
+        <button
+          onClick={onOpenRadio}
+          className="block w-full rounded-3xl bg-paper p-5 text-left shadow-card transition hover:-translate-y-0.5 sm:p-6"
+        >
+          <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal/12 text-teal">
                 <Radio size={17} />
               </span>
               <div>
                 <p className="font-display text-lg font-semibold text-ink">The Radio</p>
-                <p className="text-xs text-ink-soft">
-                  {nowPlaying ? (
-                    <span className="flex items-center gap-1.5">
-                      <NowPlayingBars /> {nowPlaying.title ?? 'untitled'}
-                    </span>
-                  ) : (
-                    'every song made by two people on one ride'
-                  )}
-                </p>
+                <p className="text-xs text-ink-soft">every song made by two people on one ride</p>
               </div>
             </div>
-            {songs.length > 0 && (
-              <Button
-                onClick={() => playFrom(playingIdx == null ? 0 : null)}
-                className="flex items-center gap-1.5 px-5 py-2 text-sm"
-              >
-                {playingIdx == null ? <Play size={15} /> : <Pause size={15} />}
-                {playingIdx == null ? 'play all' : 'stop'}
-              </Button>
-            )}
+            <span className="flex items-center gap-1 font-display text-sm font-semibold text-sunset">
+              open the radio <ArrowRight size={15} />
+            </span>
           </div>
 
-          <div className="mt-4 flex flex-col gap-1.5">
-            {loading && <p className="py-4 text-sm text-ink-faint">tuning…</p>}
+          <div className="flex flex-col gap-1">
+            {loading && <p className="py-2 text-sm text-ink-faint">tuning…</p>}
             {!loading && !supabase && (
-              <p className="py-4 text-sm text-ink-faint">the radio needs Supabase keys (app/.env.local)</p>
+              <p className="py-2 text-sm text-ink-faint">the radio needs Supabase keys (app/.env.local)</p>
             )}
             {!loading && supabase && songs.length === 0 && (
-              <p className="py-4 text-sm text-ink-faint">silence so far — be the first two on the air</p>
+              <p className="py-2 text-sm text-ink-faint">silence so far — be the first two on the air</p>
             )}
 
-            {songs.map((song, idx) => {
-              const isPlaying = playingIdx === idx;
+            {songs.map((song) => {
               const place = song.destinations
                 ? `${song.destinations.name}, ${song.destinations.country}`
                 : song.road ?? 'the road';
               return (
-                <button
-                  key={song.id}
-                  onClick={() => playFrom(isPlaying ? null : idx)}
-                  className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                    isPlaying ? 'bg-sunset/10' : 'hover:bg-sand/60'
-                  }`}
-                >
-                  <span
-                    className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition ${
-                      isPlaying ? 'bg-sunset text-paper' : 'bg-sunset/12 text-sunset group-hover:bg-sunset/20'
-                    }`}
-                  >
-                    {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                <div key={song.id} className="flex items-center gap-3 rounded-xl px-2 py-2">
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-sunset/12 text-sunset">
+                    <Play size={16} className="ml-0.5" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5 truncate font-display text-sm font-semibold text-ink">
@@ -219,8 +180,7 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
                       {song.recipe?.vocals && <Mic size={12} className="flex-shrink-0 text-teal" />}
                     </p>
                     <p className="truncate text-xs text-ink-soft">
-                      {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ') || 'two riders'} · {place} ·{' '}
-                      {new Date(song.created_at).toLocaleDateString()}
+                      {(song.contributor_glyphs ?? []).map((c) => characterName(c) ?? c).join(' + ') || 'two riders'} · {place}
                     </p>
                   </div>
                   <div className="flex flex-shrink-0 -space-x-2">
@@ -228,17 +188,11 @@ export default function Home({ onGlovebox }: { onGlovebox: () => void }) {
                       <CharacterFace key={i} id={c} size={28} />
                     ))}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
-
-          {nowPlaying?.recipe?.brief && (
-            <p className="mt-4 border-t border-ink/8 pt-3 text-center text-sm italic text-ink-soft">
-              “{nowPlaying.recipe.brief}”
-            </p>
-          )}
-        </div>
+        </button>
       </section>
 
       {/* How it works — four stops on one road */}
@@ -290,16 +244,6 @@ function NavLink({ onClick, icon, label }: { onClick: () => void; icon: React.Re
       {icon}
       {label}
     </button>
-  );
-}
-
-function NowPlayingBars() {
-  return (
-    <span className="inline-flex h-3 items-end gap-0.5" aria-hidden>
-      <span className="w-0.5 animate-pulse rounded-full bg-teal" style={{ height: '60%', animationDelay: '0ms' }} />
-      <span className="w-0.5 animate-pulse rounded-full bg-teal" style={{ height: '100%', animationDelay: '150ms' }} />
-      <span className="w-0.5 animate-pulse rounded-full bg-teal" style={{ height: '40%', animationDelay: '300ms' }} />
-    </span>
   );
 }
 
