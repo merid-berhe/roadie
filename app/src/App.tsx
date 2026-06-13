@@ -7,7 +7,7 @@ import RideScreen from './screens/RideScreen';
 import ModelInspector from './screens/ModelInspector';
 import ScenePreview from './screens/ScenePreview';
 import CarPreview from './screens/CarPreview';
-import DriveSpike from './screens/DriveSpike';
+import WorldViewer from './screens/WorldViewer';
 import Home from './screens/Home';
 import Radio from './screens/Radio';
 import Glovebox from './screens/Glovebox';
@@ -17,7 +17,7 @@ const params = new URLSearchParams(window.location.search);
 const isInspector = params.has('inspect');
 const isPreview   = params.has('scene');
 const isCarPreview = params.has('car');
-const isDriveSpike = params.has('drive');
+const isWorldViewer = params.has('world');
 const roomParam = params.get('room');
 
 export default function App() {
@@ -42,7 +42,7 @@ export default function App() {
   if (isInspector) return <ModelInspector />;
   if (isPreview)   return <ScenePreview />;
   if (isCarPreview) return <CarPreview />;
-  if (isDriveSpike) return <DriveSpike />;
+  if (isWorldViewer) return <WorldViewer />;
 
   // v5.3: a bare link is the front door — intro + the Radio. Rides live at ?room=.
   // v6.3: the Radio is its own page (a listening hangout), not just a Home section.
