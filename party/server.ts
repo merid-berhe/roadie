@@ -1,5 +1,5 @@
 import type * as Party from 'partykit/server';
-import type { ClientMsg, DanceMove, Destination, Phase, Rider, Role, RoomMsg } from '@roadie/shared';
+import type { ClientMsg, Destination, Phase, Rider, Role, RoomMsg } from '@roadie/shared';
 import {
   buildPrompt,
   CHARACTER_IDS,
@@ -18,8 +18,6 @@ type Participant = {
   color: string;
   character: string; // v5.4 — dealt at join, distinct per rider
 };
-
-const DANCE_SYNC_WINDOW_MS = 1500;
 
 export default class RideRoom implements Party.Server {
   private participants = new Map<string, Participant>();
@@ -40,21 +38,10 @@ export default class RideRoom implements Party.Server {
   private audioUrl: string | null = null;
   private rideStartAt: number | null = null;
   private lyricsText: string | null = null; // v5.2 — required by MiniMax for vocal rides
-  private trackDurationSec: number | null = null; // v5.8 — client-measured real length
-  private arrivalTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly generator: MusicGenerator;
 
-  // Clock sync (M4) — §9
+  // Clock sync (M4) — §9 (salvaged: a bar's synced playlist will reuse this)
   private syncTimer: ReturnType<typeof setInterval> | null = null;
-
-  // Gestures (M5) — §8
-  private lastGestureMs = new Map<string, number>(); // connId → last gesture timestamp
-  private fireworkWindow: { connId: string; at: number } | null = null;
-  private fireworkTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // The Meeting (§8d) — dance-off during generation
-  private lastDance = new Map<string, { move: DanceMove; at: number }>();
-  private lastDanceSentMs = new Map<string, number>();
 
   // v5.9 — reconnecting riders (HMR, network blips) keep their seat & character
   private pastIdentities = new Map<string, { role: Role; character: string }>();
@@ -79,12 +66,7 @@ export default class RideRoom implements Party.Server {
       case 'vocals':  return this.handleVocals(msg, sender);
       case 'ready':   return this.handleReady(sender);
       case 'ping':    return this.handlePing(msg, sender);
-      case 'trackDuration': return this.handleTrackDuration(msg);
-      case 'dance':   return this.handleDance(msg, sender);
-      case 'gesture': return this.handleGesture(msg, sender);
-      case 'firework':return this.handleFirework(sender);
       case 'name':    return this.handleName(msg, sender);
-      case 'road':    return this.handleRoad(msg, sender);
     }
   }
 
@@ -92,7 +74,6 @@ export default class RideRoom implements Party.Server {
     if (this.participants.delete(conn.id)) {
       this.chosenInstruments.delete(conn.id);
       this.readyConnIds.delete(conn.id);
-      this.lastDance.delete(conn.id);
       if (this.participants.size === 0 && this.syncTimer) {
         clearInterval(this.syncTimer);
         this.syncTimer = null;
@@ -310,12 +291,13 @@ export default class RideRoom implements Party.Server {
     }
   }
 
+  // v7.0 — the roadtrip is gone: when the song is ready, go straight to naming.
+  // The track still plays (rideStart carries the audio) while the pair names it.
   private startRide(): void {
-    if (!this.audioUrl || !this.generationInput || this.phase === 'riding') return;
-    this.rideStartAt = Date.now() + 2_000; // 2s buffer for clients to load (M4: proper clock sync)
-    this.phase = 'riding';
+    if (!this.audioUrl || !this.generationInput || this.phase === 'arrival') return;
+    this.rideStartAt = Date.now() + 2_000; // 2s buffer for clients to load + start audio
+    this.phase = 'arrival';
 
-    // Broadcast rideStart first (triggers audio), then state (triggers routing)
     const rideStartMsg: RoomMsg = {
       t: 'rideStart', audioUrl: this.audioUrl, source: 'own',
       rideStartAt: this.rideStartAt, bpm: this.generationInput.bpm,
@@ -323,132 +305,17 @@ export default class RideRoom implements Party.Server {
     for (const connId of this.participants.keys()) {
       this.room.getConnection(connId)?.send(JSON.stringify(rideStartMsg));
     }
-    this.startSyncInterval();
-    this.scheduleArrival();
     this.broadcastState();
   }
 
-  // --- the Meeting (§8d): dance-off while the song presses ---
-
-  private handleDance(msg: Extract<ClientMsg, { t: 'dance' }>, sender: Party.Connection): void {
-    const p = this.participants.get(sender.id);
-    if (!p || this.phase !== 'generating') return;
-    const now = Date.now();
-    if (now - (this.lastDanceSentMs.get(sender.id) ?? 0) < 500) return; // rate limit
-    this.lastDanceSentMs.set(sender.id, now);
-
-    this.broadcastToPeer(sender.id, { t: 'peerDance', glyph: p.glyph, move: msg.move });
-
-    // synced-move arbitration — same move from both riders inside the window (§8c pattern)
-    const peerId = [...this.participants.keys()].find((id) => id !== sender.id);
-    const peerDance = peerId ? this.lastDance.get(peerId) : undefined;
-    if (peerDance && peerDance.move === msg.move && now - peerDance.at <= DANCE_SYNC_WINDOW_MS) {
-      this.lastDance.delete(sender.id);
-      if (peerId) this.lastDance.delete(peerId);
-      for (const connId of this.participants.keys()) {
-        this.room.getConnection(connId)?.send(
-          JSON.stringify({ t: 'danceSynced', move: msg.move } satisfies RoomMsg),
-        );
-      }
-    } else {
-      this.lastDance.set(sender.id, { move: msg.move, at: now });
-    }
-  }
-
-  // --- gestures (M5, §8) ---
-
-  private handleGesture(msg: Extract<ClientMsg, { t: 'gesture' }>, sender: Party.Connection): void {
-    const p = this.participants.get(sender.id);
-    if (!p || this.phase !== 'riding') return;
-    // Rate-limit: max one gesture per second per rider (§8)
-    const now = Date.now();
-    if (now - (this.lastGestureMs.get(sender.id) ?? 0) < 1000) return;
-    this.lastGestureMs.set(sender.id, now);
-    this.broadcastToPeer(sender.id, { t: 'peerGesture', glyph: p.glyph, kind: msg.kind });
-  }
-
-  private handleFirework(sender: Party.Connection): void {
-    if (this.phase !== 'riding') return;
-    if (!this.fireworkWindow) {
-      // First tap — open the 1500ms sync window (§8c)
-      this.fireworkWindow = { connId: sender.id, at: Date.now() };
-      this.fireworkTimer = setTimeout(() => {
-        // Only one tapped — send single firework to them (inaction is never punished)
-        this.room.getConnection(this.fireworkWindow!.connId)?.send(
-          JSON.stringify({ t: 'fireworkSynced', synced: false } satisfies RoomMsg),
-        );
-        this.fireworkWindow = null;
-        this.fireworkTimer = null;
-      }, 1500);
-    } else {
-      // Second tap within window — synced bloom to BOTH (§8c)
-      if (this.fireworkTimer) clearTimeout(this.fireworkTimer);
-      const firstConnId = this.fireworkWindow.connId;
-      this.fireworkWindow = null;
-      this.fireworkTimer = null;
-      for (const connId of [firstConnId, sender.id]) {
-        this.room.getConnection(connId)?.send(
-          JSON.stringify({ t: 'fireworkSynced', synced: true } satisfies RoomMsg),
-        );
-      }
-    }
-  }
-
-  // --- clock sync (M4, §9) ---
-
   private handlePing(msg: Extract<ClientMsg, { t: 'ping' }>, sender: Party.Connection): void {
     sender.send(JSON.stringify({ t: 'pong', sentAt: msg.sentAt, serverTime: Date.now() } satisfies RoomMsg));
-  }
-
-  private scheduleArrival(): void {
-    // provisional 120s; re-timed when a client reports the track's real length (v5.8)
-    this.scheduleArrivalIn(120_000);
-  }
-
-  private scheduleArrivalIn(ms: number): void {
-    if (this.arrivalTimer) clearTimeout(this.arrivalTimer);
-    this.arrivalTimer = setTimeout(() => {
-      if (this.phase !== 'riding') return;
-      this.phase = 'arrival';
-      if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; }
-      this.broadcastState();
-    }, Math.max(1_000, ms));
-  }
-
-  // v5.8 — the ride ends when the SONG ends: first sane client report wins,
-  // arrival lands shortly after the final note (the finale plays out on top)
-  private handleTrackDuration(msg: Extract<ClientMsg, { t: 'trackDuration' }>): void {
-    if (this.phase !== 'riding' || !this.rideStartAt) return;
-    if (this.trackDurationSec != null) return; // first report wins (same file both sides)
-    const sec = Number(msg.sec);
-    if (!Number.isFinite(sec) || sec < 30 || sec > 300) return;
-    this.trackDurationSec = sec;
-    console.log(`[room] track_duration_sec=${Math.round(sec)} — arrival re-timed`);
-    this.broadcastAll({ t: 'trackDuration', sec });
-    this.scheduleArrivalIn(this.rideStartAt + (sec + 1.5) * 1000 - Date.now());
-  }
-
-  private handleRoad(msg: Extract<ClientMsg, { t: 'road' }>, sender: Party.Connection): void {
-    const p = this.participants.get(sender.id);
-    if (!p || p.role !== 'driver') return; // only driver picks the road
-    this.broadcastToPeer(sender.id, { t: 'peerRoad', roadId: msg.roadId });
   }
 
   private handleName(msg: Extract<ClientMsg, { t: 'name' }>, sender: Party.Connection): void {
     const p = this.participants.get(sender.id);
     if (!p || this.phase !== 'arrival') return;
     this.broadcastToPeer(sender.id, { t: 'nameWord', glyph: p.glyph, word: msg.word });
-  }
-
-  private startSyncInterval(): void {
-    if (this.syncTimer) return;
-    this.syncTimer = setInterval(() => {
-      if (!this.rideStartAt) return;
-      const positionSec = (Date.now() - this.rideStartAt) / 1000;
-      for (const connId of this.participants.keys()) {
-        this.room.getConnection(connId)?.send(JSON.stringify({ t: 'sync', positionSec } satisfies RoomMsg));
-      }
-    }, 10_000);
   }
 
   // --- helpers ---
@@ -488,12 +355,6 @@ export default class RideRoom implements Party.Server {
   private broadcastToPeer(senderConnId: string, msg: RoomMsg): void {
     for (const connId of this.participants.keys()) {
       if (connId !== senderConnId) this.room.getConnection(connId)?.send(JSON.stringify(msg));
-    }
-  }
-
-  private broadcastAll(msg: RoomMsg): void {
-    for (const connId of this.participants.keys()) {
-      this.room.getConnection(connId)?.send(JSON.stringify(msg));
     }
   }
 

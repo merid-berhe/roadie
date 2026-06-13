@@ -11,7 +11,6 @@ import { useSession } from '../state/session';
 import Compose from './Compose';
 import Generating from './Generating';
 import Lobby from './Lobby';
-import Riding from './Riding';
 import Arrival from './Arrival';
 import PostRide from './PostRide';
 import Glovebox from './Glovebox';
@@ -151,7 +150,9 @@ export default function RideScreen() {
   switch (phase) {
     case 'lobby':      return <Compose />;
     case 'generating': return <Generating />;
-    case 'riding':     return <Riding />;
+    // v7.0: no ride — when the song is ready the server jumps to 'arrival',
+    // which the postPhase effect above routes into the naming screen (the
+    // track plays via the crossfade effect while the pair names it).
     default:           return null;
   }
 }

@@ -1,11 +1,9 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Archive, Car, Music2 } from 'lucide-react';
 import { getAudioState, onAudioStateChange, startIdleHum, unlockAudio } from '../audio/engine';
 import { ensureIdentity } from '../auth/identity';
 import { useSession } from '../state/session';
 import { Button, Glass, RoadDivider } from '../components/ui';
-
-const PlayCanvasRideScene = lazy(() => import('../scene/PlayCanvasRideScene'));
 
 export default function GetIn() {
   const setIdentity = useSession((s) => s.setIdentity);
@@ -14,18 +12,8 @@ export default function GetIn() {
   const [agreed, setAgreed] = useState(false);
   const [entering, setEntering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [t, setT] = useState(0);
 
   useEffect(() => onAudioStateChange(setAudioState), [setAudioState]);
-
-  // a slow coast drive behind the glass — a taste of where you're headed
-  useEffect(() => {
-    let raf: number;
-    const start = performance.now();
-    const tick = (now: number) => { setT((now - start) / 1000); raf = requestAnimationFrame(tick); };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
 
   async function handleGetIn() {
     if (!agreed || entering) return;
@@ -45,21 +33,9 @@ export default function GetIn() {
   }
 
   return (
-    <main className="relative flex min-h-full items-center justify-center overflow-hidden bg-cream px-6 py-12">
-      {/* a live coast scene as the backdrop */}
-      <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-b from-sky to-cream" />}>
-        <PlayCanvasRideScene
-          road="coast"
-          positionSec={t}
-          driverColor="#C23A2B"
-          passengerColor="#1F7A74"
-          driverCharacter="theo"
-          passengerCharacter="wren"
-        />
-      </Suspense>
-      <div className="pointer-events-none absolute inset-0 bg-cream/35" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-cream" />
-
+    <main className="relative flex min-h-full items-center justify-center overflow-hidden px-6 py-12"
+      style={{ background: 'linear-gradient(180deg, #8ac9e8 0%, #c8dbe6 45%, #ecf1f4 100%)' }}
+    >
       <Glass className="relative z-10 flex w-full max-w-md flex-col items-center gap-5 px-7 py-9 text-center">
         <div className="flex flex-col items-center gap-2">
           <h1 className="font-display text-5xl font-semibold tracking-tight text-ink">Roadie</h1>
@@ -68,8 +44,8 @@ export default function GetIn() {
 
         <p className="text-[15px] leading-7 text-ink-soft">
           You'll meet a co-rider and compose a song together — pick an instrument, write a
-          direction, and the studio fuses both into one track. Then ride to a real place while
-          it plays.
+          direction, and the studio fuses both into one track. It joins this bar's collection
+          for everyone to hear.
         </p>
 
         <div className="flex flex-col gap-2 text-left text-sm text-ink-soft">

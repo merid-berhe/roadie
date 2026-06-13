@@ -130,7 +130,22 @@ export const DESTINATIONS: Destination[] = [
   },
 ];
 
+// v7.0 — destinations are now BARS on the world map. A room code carries the
+// chosen bar as a prefix: `<barId>__<random>` (the map / invite link encodes it).
+// We resolve that bar; if the code has no valid bar prefix, we fall back to a
+// stable hash so legacy/standalone codes still get a bar.
+export function destinationById(id: string | null | undefined): Destination | undefined {
+  return DESTINATIONS.find((d) => d.id === id);
+}
+
+export function barIdFromRoom(roomCode: string): string | null {
+  const prefix = roomCode.split('__')[0];
+  return destinationById(prefix) ? prefix : null;
+}
+
 export function pickDestinationForRoom(roomCode: string): Destination {
+  const barId = barIdFromRoom(roomCode);
+  if (barId) return destinationById(barId)!;
   let hash = 2166136261;
   for (let i = 0; i < roomCode.length; i++) {
     hash ^= roomCode.charCodeAt(i);
@@ -138,3 +153,6 @@ export function pickDestinationForRoom(roomCode: string): Destination {
   }
   return DESTINATIONS[(hash >>> 0) % DESTINATIONS.length];
 }
+
+/** Bars are the map locations. (Alias of DESTINATIONS during the v7 refactor.) */
+export const BARS = DESTINATIONS;

@@ -4,31 +4,24 @@ import { supabase } from './lib/supabase';
 import { AudioIndicator } from './components/AudioIndicator';
 import GetIn from './screens/GetIn';
 import RideScreen from './screens/RideScreen';
-import ModelInspector from './screens/ModelInspector';
-import ScenePreview from './screens/ScenePreview';
-import CarPreview from './screens/CarPreview';
-import Home from './screens/Home';
+import WorldMap from './screens/WorldMap';
 import Radio from './screens/Radio';
 import Glovebox from './screens/Glovebox';
 import { useSession } from './state/session';
 
 const params = new URLSearchParams(window.location.search);
-const isInspector = params.has('inspect');
-const isPreview   = params.has('scene');
-const isCarPreview = params.has('car');
 const roomParam = params.get('room');
 
 export default function App() {
   const identity = useSession((s) => s.identity);
   const setIdentity = useSession((s) => s.setIdentity);
-  const [view, setView] = useState<'home' | 'radio' | 'glovebox'>('home');
+  const [view, setView] = useState<'map' | 'radio' | 'glovebox'>('map');
 
-  // On the bare site (Home/Glovebox), recover the persisted anonymous session
-  // so the Glovebox can read the user's own saved songs. Identity is otherwise
+  // On the bare site (map/radio/glovebox), recover the persisted anonymous
+  // session so the Glovebox can read the user's own songs. Identity is otherwise
   // only set inside the ?room flow (GetIn), so without this the Glovebox sees a
-  // null userId and shows nothing. We do NOT mint a new anon user here (just
-  // browsing the Radio shouldn't create accounts), and we leave the ?room path
-  // alone — GetIn must run there for the tap that unlocks audio (§11).
+  // null userId. We don't mint a new anon user just for browsing, and we leave
+  // the ?room path alone — GetIn must run there for the audio-unlock tap (§11).
   useEffect(() => {
     if (roomParam || !supabase || identity) return;
     supabase.auth.getSession().then(({ data }) => {
@@ -37,16 +30,11 @@ export default function App() {
     });
   }, [identity, setIdentity]);
 
-  if (isInspector) return <ModelInspector />;
-  if (isPreview)   return <ScenePreview />;
-  if (isCarPreview) return <CarPreview />;
-
-  // v5.3: a bare link is the front door — intro + the Radio. Rides live at ?room=.
-  // v6.3: the Radio is its own page (a listening hangout), not just a Home section.
+  // v7.0: the world map is the front door. Rides (bars) live at ?room=<barId>__x
   if (!roomParam) {
-    if (view === 'glovebox') return <Glovebox onBack={() => setView('home')} />;
-    if (view === 'radio')    return <Radio onBack={() => setView('home')} onGlovebox={() => setView('glovebox')} />;
-    return <Home onOpenRadio={() => setView('radio')} onGlovebox={() => setView('glovebox')} />;
+    if (view === 'glovebox') return <Glovebox onBack={() => setView('map')} />;
+    if (view === 'radio') return <Radio onBack={() => setView('map')} onGlovebox={() => setView('glovebox')} />;
+    return <WorldMap onOpenRadio={() => setView('radio')} onGlovebox={() => setView('glovebox')} />;
   }
 
   return (
