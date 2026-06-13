@@ -1,10 +1,10 @@
-// v7.0 — the world map is Home. Bars (cities) are pins; you pick one to enter.
-// Rough pass: a clean stylized map panel with lat/lon-placed pins + real song
-// counts. A mini-car rolls to your pick (delight + masks the room load). The
-// beautiful illustrated map is Phase 2.
+// v7.0 Phase 2 — the world map is Home. A real-geography world (equirectangular
+// SVG, recoloured to our palette), full-screen, with bar pins; picking one drives
+// the cicada there and zooms in to reveal the bar before you enter. (If we later
+// swap in illustrated/isometric art, only the base layer + pin coords change.)
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { Archive, Car, MapPin, Music2, Radio } from 'lucide-react';
+import { Archive, Music2, Radio } from 'lucide-react';
 import { BARS } from '@roadie/shared';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
@@ -18,31 +18,31 @@ function randomCode(n = 5): string {
   return s;
 }
 
-// equirectangular projection → percentage position on the map panel
+// equirectangular → percent within the map plate
 const px = (lon: number) => ((lon + 180) / 360) * 100;
 const py = (lat: number) => ((90 - lat) / 180) * 100;
 
 export default function WorldMap({ onOpenRadio, onGlovebox }: { onOpenRadio: () => void; onGlovebox: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const carRef = useRef<HTMLDivElement>(null);
+  const plateRef = useRef<HTMLDivElement>(null);
+  const carRef = useRef<HTMLImageElement>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [traveling, setTraveling] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
     supabase.from('songs').select('destination_id').then(({ data }) => {
-      const tally: Record<string, number> = {};
+      const t: Record<string, number> = {};
       for (const r of (data ?? []) as { destination_id: string | null }[]) {
-        if (r.destination_id) tally[r.destination_id] = (tally[r.destination_id] ?? 0) + 1;
+        if (r.destination_id) t[r.destination_id] = (t[r.destination_id] ?? 0) + 1;
       }
-      setCounts(tally);
+      setCounts(t);
     });
   }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      gsap.from('[data-pin]', { scale: 0, opacity: 0, duration: 0.5, ease: 'back.out(2)', stagger: 0.06, delay: 0.2 });
-      gsap.from('[data-hd]', { y: -16, opacity: 0, duration: 0.6, ease: 'power3.out' });
+      gsap.from('[data-pin]', { scale: 0, opacity: 0, duration: 0.5, ease: 'back.out(2)', stagger: 0.05, delay: 0.3 });
     }, rootRef);
     return () => ctx.revert();
   }, []);
@@ -51,63 +51,58 @@ export default function WorldMap({ onOpenRadio, onGlovebox }: { onOpenRadio: () 
     if (traveling) return;
     setTraveling(barId);
     track('bar_entered', { bar: barId });
+    const x = px(lon), y = py(lat);
     const go = () => {
       const url = new URL(window.location.href);
       url.searchParams.set('room', `${barId}__${randomCode()}`);
       window.location.href = url.toString();
     };
-    // roll the mini-car to the pin, then navigate (delight + load mask)
-    if (carRef.current && rootRef.current) {
+    const tl = gsap.timeline({ onComplete: () => setTimeout(go, 350) });
+    if (carRef.current) {
       gsap.set(carRef.current, { opacity: 1 });
-      gsap.to(carRef.current, {
-        left: `${px(lon)}%`, top: `${py(lat)}%`, duration: 1.0, ease: 'power2.inOut',
-        onComplete: () => setTimeout(go, 250),
-      });
-    } else {
-      setTimeout(go, 200);
+      tl.to(carRef.current, { left: `${x}%`, top: `${y}%`, duration: 1.1, ease: 'power2.inOut' }, 0);
+    }
+    if (plateRef.current) {
+      tl.to(plateRef.current, { scale: 3, transformOrigin: `${x}% ${y}%`, duration: 1.4, ease: 'power2.inOut' }, 0.2);
     }
   }
 
   return (
-    <main ref={rootRef} className="flex min-h-full flex-col bg-cream">
+    <div ref={rootRef} className="relative h-screen w-screen overflow-hidden" style={{ background: 'linear-gradient(180deg,#bfe0ee,#9ec7df)' }}>
       {/* nav */}
-      <nav className="sticky top-0 z-30 border-b border-ink/5 bg-cream/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3">
-          <div data-hd>
-            <span className="font-display text-xl font-semibold tracking-tight text-ink">Roadie</span>
-            <span className="road-dashes mt-0.5 block w-12" />
-          </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <NavLink onClick={onOpenRadio} icon={<Radio size={14} />} label="Listen" />
-            <NavLink onClick={onGlovebox} icon={<Archive size={14} />} label="Glovebox" />
-          </div>
+      <nav className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 py-3">
+        <div className="rounded-full bg-paper/85 px-3 py-1.5 shadow-card backdrop-blur-md">
+          <span className="font-display text-lg font-semibold tracking-tight text-ink">Roadie</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={onOpenRadio} className="flex items-center gap-1.5 px-3 py-2 text-sm"><Radio size={14} /> Listen</Button>
+          <Button variant="secondary" onClick={onGlovebox} className="flex items-center gap-1.5 px-3 py-2 text-sm"><Archive size={14} /> Glovebox</Button>
         </div>
       </nav>
 
-      <div className="mx-auto w-full max-w-5xl px-5 py-6">
-        <div data-hd className="mb-5 text-center">
-          <h1 className="font-display text-2xl font-semibold text-ink sm:text-3xl">Pick a bar. Make a song with someone there.</h1>
-          <p className="mt-1 text-sm text-ink-soft">every bar collects the music made in it — drop in and add yours</p>
-        </div>
+      <div className="absolute inset-x-0 top-16 z-20 text-center">
+        <p className="font-display text-base font-semibold text-ink drop-shadow-sm sm:text-lg">Pick a bar. Make a song with someone there.</p>
+      </div>
 
-        {/* the (rough) map */}
-        <div
-          className="relative w-full overflow-hidden rounded-3xl border border-ink/10 shadow-card"
-          style={{
-            aspectRatio: '2 / 1',
-            background: 'linear-gradient(180deg, #bfe0ee 0%, #a8d2e6 55%, #9ec7df 100%)',
-            backgroundImage:
-              'repeating-linear-gradient(0deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 12.5%), repeating-linear-gradient(90deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 8.33%), linear-gradient(180deg, #bfe0ee, #9ec7df)',
-          }}
-        >
-          {/* mini traveler */}
-          <div
+      {/* the map plate (zoom target) */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div ref={plateRef} className="worldplate relative w-full" style={{ aspectRatio: '2754 / 1398' }}>
+          {/* base world — its own styling (land/borders) over our ocean; warm-tinted */}
+          <img
+            src="/assets/world.svg"
+            alt=""
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            style={{ filter: 'sepia(0.5) saturate(1.1) brightness(1.02) hue-rotate(-8deg)' }}
+          />
+
+          {/* mini cicada traveler */}
+          <img
             ref={carRef}
-            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 text-sunset opacity-0"
-            style={{ left: '50%', top: '60%' }}
-          >
-            <Car size={26} />
-          </div>
+            src="/assets/cicada-map.png"
+            alt=""
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 opacity-0"
+            style={{ left: '50%', top: '58%', width: '7%' }}
+          />
 
           {BARS.map((b) => {
             const songs = counts[b.id] ?? 0;
@@ -116,42 +111,27 @@ export default function WorldMap({ onOpenRadio, onGlovebox }: { onOpenRadio: () 
                 key={b.id}
                 data-pin
                 onClick={() => enterBar(b.id, b.lon, b.lat)}
-                className="group absolute z-10 flex -translate-x-1/2 -translate-y-full flex-col items-center"
+                className="group absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
                 style={{ left: `${px(b.lon)}%`, top: `${py(b.lat)}%` }}
               >
-                <span className="whitespace-nowrap rounded-full bg-paper px-2.5 py-1 text-xs font-display font-semibold text-ink shadow-card transition group-hover:-translate-y-0.5">
+                <span className="mb-0.5 whitespace-nowrap rounded-full bg-paper px-2 py-0.5 text-[11px] font-display font-semibold text-ink shadow-card transition group-hover:-translate-y-0.5">
                   {b.name}
-                  <span className="ml-1.5 inline-flex items-center gap-0.5 font-normal text-ink-soft">
-                    <Music2 size={10} className="text-sunset" />{songs}
+                  <span className="ml-1 inline-flex items-center gap-0.5 font-normal text-ink-soft">
+                    <Music2 size={9} className="text-sunset" />{songs}
                   </span>
                 </span>
-                <MapPin size={20} className="mt-0.5 fill-sunset text-sunset-deep drop-shadow" />
+                <span className="h-3 w-3 rounded-full border-2 border-paper bg-sunset shadow ring-1 ring-sunset-deep/40 transition group-hover:scale-125" />
               </button>
             );
           })}
         </div>
-
-        <div className="mt-4 flex items-center justify-center gap-2 text-xs text-ink-soft">
-          <MapPin size={13} className="text-sunset" /> tap a bar to head there
-          <span className="text-ink-faint">·</span>
-          <Music2 size={13} className="text-sunset" /> songs made there
-        </div>
-
-        {traveling && (
-          <p className="mt-3 text-center text-sm font-display font-semibold text-sunset-deep">
-            heading to {BARS.find((b) => b.id === traveling)?.name}…
-          </p>
-        )}
       </div>
-    </main>
-  );
-}
 
-function NavLink({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <Button variant="ghost" onClick={onClick} className="flex items-center gap-1.5 px-3 py-2 text-sm">
-      {icon}
-      {label}
-    </Button>
+      {traveling && (
+        <p className="absolute inset-x-0 bottom-6 z-30 text-center font-display text-sm font-semibold text-sunset-deep">
+          driving to {BARS.find((b) => b.id === traveling)?.name}…
+        </p>
+      )}
+    </div>
   );
 }
